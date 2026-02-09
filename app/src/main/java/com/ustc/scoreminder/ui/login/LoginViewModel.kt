@@ -62,6 +62,17 @@ class LoginViewModel @Inject constructor(
         loginUseCase.logout()
         uiState = LoginUiState()
     }
+    
+    /**
+     * WebView 登录成功回调
+     * @param cookies 登录成功后的 cookies
+     */
+    fun onWebViewLoginSuccess(cookies: String) {
+        // 标记登录成功
+        // WebView 登录后，cookies 已经由 WebView 的 CookieManager 管理
+        // 后续的网络请求会自动使用这些 cookies
+        uiState = uiState.copy(isLoggedIn = true)
+    }
 }
 
 data class LoginUiState(

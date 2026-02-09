@@ -25,14 +25,46 @@ fun LoginScreen(
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val uiState = viewModel.uiState
-    val focusManager = LocalFocusManager.current
-    var passwordVisible by remember { mutableStateOf(false) }
+    var showWebViewLogin by remember { mutableStateOf(false) }
     
     LaunchedEffect(uiState.isLoggedIn) {
         if (uiState.isLoggedIn) {
             onLoginSuccess()
         }
     }
+    
+    if (showWebViewLogin) {
+        // WebView 登录界面
+        WebViewLoginScreen(
+            onLoginSuccess = { cookies ->
+                viewModel.onWebViewLoginSuccess(cookies)
+            },
+            onLoginCancel = {
+                showWebViewLogin = false
+            }
+        )
+    } else {
+        // 主登录界面
+        MainLoginContent(
+            uiState = uiState,
+            onUsernameChange = viewModel::updateUsername,
+            onPasswordChange = viewModel::updatePassword,
+            onLogin = viewModel::login,
+            onWebViewLogin = { showWebViewLogin = true }
+        )
+    }
+}
+
+@Composable
+private fun MainLoginContent(
+    uiState: LoginUiState,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onLogin: () -> Unit,
+    onWebViewLogin: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    var passwordVisible by remember { mutableStateOf(false) }
     
     Column(
         modifier = Modifier
@@ -61,7 +93,7 @@ fun LoginScreen(
         // 用户名输入
         OutlinedTextField(
             value = uiState.username,
-            onValueChange = viewModel::updateUsername,
+            onValueChange = onUsernameChange,
             label = { Text("学号") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -80,7 +112,7 @@ fun LoginScreen(
         // 密码输入
         OutlinedTextField(
             value = uiState.password,
-            onValueChange = viewModel::updatePassword,
+            onValueChange = onPasswordChange,
             label = { Text("密码") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -92,7 +124,7 @@ fun LoginScreen(
             keyboardActions = KeyboardActions(
                 onDone = { 
                     focusManager.clearFocus()
-                    viewModel.login()
+                    onLogin()
                 }
             ),
             trailingIcon = {
@@ -120,9 +152,22 @@ fun LoginScreen(
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // 登录按钮
+        // WebView 登录按钮（主要方案）
         Button(
-            onClick = viewModel::login,
+            onClick = onWebViewLogin,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            enabled = !uiState.isLoading
+        ) {
+            Text("使用网页登录（推荐）")
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // 直接登录按钮（备用方案）
+        OutlinedButton(
+            onClick = onLogin,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
@@ -131,10 +176,10 @@ fun LoginScreen(
             if (uiState.isLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
+                    color = MaterialTheme.colorScheme.primary
                 )
             } else {
-                Text("登录")
+                Text("直接登录")
             }
         }
         
