@@ -8,10 +8,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -26,6 +28,19 @@ fun GradeListScreen(
     val uiState by viewModel.uiState.collectAsState()
     val gradesBySemester by viewModel.gradesBySemester.collectAsState()
     
+    val pullToRefreshState = rememberPullToRefreshState()
+    if (pullToRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            viewModel.syncGrades()
+        }
+    }
+    
+    LaunchedEffect(uiState.isRefreshing) {
+        if (!uiState.isRefreshing) {
+            pullToRefreshState.endRefresh()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -45,12 +60,11 @@ fun GradeListScreen(
             )
         }
     ) { paddingValues ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
-            onRefresh = viewModel::syncGrades,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .nestedScroll(pullToRefreshState.nestedScrollConnection)
         ) {
             if (gradesBySemester.isEmpty() && !uiState.isRefreshing) {
                 EmptyState()
@@ -110,6 +124,11 @@ fun GradeListScreen(
                     }
                 }
             }
+            
+            PullToRefreshContainer(
+                state = pullToRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
