@@ -89,29 +89,34 @@ class WebViewSyncCookieJar : CookieJar {
         val result = mutableListOf<Cookie>()
         val host = url.host
         
-        // 首先尝试从 WebView CookieManager 获取 cookies
+        // 从 WebView CookieManager 获取 cookies
         try {
             val webViewCookies = syncFromWebView(url)
-            result.addAll(webViewCookies)
-        } catch (e: Exception) {
-            // 忽略错误，继续使用内存中的 cookies
-        }
-        
-        // 如果 WebView 没有 cookies，使用内存中的
-        if (result.isEmpty()) {
-            // 获取当前域名的 cookies
-            cookieStore[host]?.let { result.addAll(it) }
-            
-            // 获取父域名的 cookies (e.g., .ustc.edu.cn)
-            val parts = host.split(".")
-            if (parts.size >= 2) {
-                val parentDomain = parts.takeLast(2).joinToString(".")
-                cookieStore[parentDomain]?.let { result.addAll(it) }
-                cookieStore[".$parentDomain"]?.let { result.addAll(it) }
+            if (webViewCookies.isNotEmpty()) {
+                android.util.Log.d("WebViewSyncCookieJar", "Loaded ${webViewCookies.size} cookies from WebView for $host")
+                result.addAll(webViewCookies)
             }
+        } catch (e: Exception) {
+            android.util.Log.w("WebViewSyncCookieJar", "Error loading cookies from WebView: ${e.message}")
         }
         
-        return result.filter { !it.expiresAt.let { exp -> exp < System.currentTimeMillis() } }
+        // 合并内存中的 cookies（避免重复）
+        val existingNames = result.map { it.name }.toSet()
+        
+        // 获取当前域名的 cookies
+        cookieStore[host]?.filter { it.name !in existingNames }?.let { result.addAll(it) }
+        
+        // 获取父域名的 cookies (e.g., .ustc.edu.cn)
+        val parts = host.split(".")
+        if (parts.size >= 2) {
+            val parentDomain = parts.takeLast(2).joinToString(".")
+            cookieStore[parentDomain]?.filter { it.name !in existingNames }?.let { result.addAll(it) }
+            cookieStore[".$parentDomain"]?.filter { it.name !in existingNames }?.let { result.addAll(it) }
+        }
+        
+        val finalCookies = result.filter { it.expiresAt > System.currentTimeMillis() }
+        android.util.Log.d("WebViewSyncCookieJar", "Returning ${finalCookies.size} cookies for ${url.host}: ${finalCookies.map { it.name }}")
+        return finalCookies
     }
     
     /**
@@ -122,7 +127,27 @@ class WebViewSyncCookieJar : CookieJar {
         
         try {
             val cookieManager = CookieManager.getInstance()
-            val cookieString = cookieManager.getCookie(url.toString()) ?: return cookies
+            
+            // 尝试多种 URL 格式获取 cookies
+            val urlsToTry = listOf(
+                url.toString(),
+                "https://${url.host}/",
+                "https://${url.host}"
+            )
+            
+            var cookieString: String? = null
+            for (urlToTry in urlsToTry) {
+                cookieString = cookieManager.getCookie(urlToTry)
+                if (!cookieString.isNullOrEmpty()) {
+                    android.util.Log.d("WebViewSyncCookieJar", "Got cookies from $urlToTry: ${cookieString.take(100)}...")
+                    break
+                }
+            }
+            
+            if (cookieString.isNullOrEmpty()) {
+                android.util.Log.d("WebViewSyncCookieJar", "No cookies found in WebView for ${url.host}")
+                return cookies
+            }
             
             // 解析 cookie 字符串 "name1=value1; name2=value2"
             cookieString.split(";").forEach { cookiePart ->
@@ -142,8 +167,9 @@ class WebViewSyncCookieJar : CookieJar {
                     }
                 }
             }
+            android.util.Log.d("WebViewSyncCookieJar", "Parsed ${cookies.size} cookies from WebView for ${url.host}")
         } catch (e: Exception) {
-            // 忽略解析错误
+            android.util.Log.e("WebViewSyncCookieJar", "Error syncing from WebView: ${e.message}")
         }
         
         return cookies

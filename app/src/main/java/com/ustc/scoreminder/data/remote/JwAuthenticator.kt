@@ -182,6 +182,7 @@ class JwAuthenticator @Inject constructor(
      */
     suspend fun checkLoginStatus(): Boolean = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "Checking login status...")
             val request = Request.Builder()
                 .url(GRADE_URL)
                 .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
@@ -191,7 +192,10 @@ class JwAuthenticator @Inject constructor(
             val response = httpClient.newCall(request).execute()
             val responseUrl = response.request.url.toString()
             
-            responseUrl.contains("for-std/grade/sheet") && !responseUrl.contains("login")
+            val isLoggedIn = responseUrl.contains("for-std/grade/sheet") && !responseUrl.contains("login")
+            Log.d(TAG, "Login status check - Response URL: $responseUrl, isLoggedIn: $isLoggedIn")
+            
+            isLoggedIn
         } catch (e: Exception) {
             Log.e(TAG, "Error checking login status", e)
             false
@@ -203,6 +207,7 @@ class JwAuthenticator @Inject constructor(
      */
     suspend fun fetchGradePage(): String? = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "Fetching grade page...")
             val request = Request.Builder()
                 .url(GRADE_URL)
                 .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
@@ -212,9 +217,14 @@ class JwAuthenticator @Inject constructor(
             val response = httpClient.newCall(request).execute()
             val responseUrl = response.request.url.toString()
             
+            Log.d(TAG, "Grade page fetch - Response URL: $responseUrl, Status: ${response.code}")
+            
             if (responseUrl.contains("for-std/grade/sheet") && !responseUrl.contains("login")) {
-                response.body?.string()
+                val html = response.body?.string()
+                Log.d(TAG, "Grade page HTML length: ${html?.length ?: 0}")
+                html
             } else {
+                Log.w(TAG, "Grade page fetch failed - redirected to login or wrong URL")
                 null
             }
         } catch (e: Exception) {
