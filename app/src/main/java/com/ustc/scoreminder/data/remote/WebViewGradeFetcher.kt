@@ -212,31 +212,53 @@ class WebViewGradeFetcher @Inject constructor(
                                     (function() {
                                         var grades = [];
                                         
-                                        // 从课程列中拆分名称和编号
-                                        // 处理 "数学分析(B1) / MATH1006" 或 "军事技能MIL1002" 格式
-                                        function splitCourseNameId(combined) {
-                                            if (!combined) return { name: '', id: '' };
-                                            // 优先按 " / " 或 "／" 分隔符拆分
-                                            var sep = combined.indexOf(' / ');
-                                            if (sep < 0) sep = combined.indexOf('／');
-                                            if (sep < 0) sep = combined.indexOf('/');
-                                            if (sep > 0) {
-                                                var parts = [combined.substring(0, sep).trim(), combined.substring(sep + (combined.charAt(sep) === '/' && combined.charAt(sep+1) === ' ' ? 3 : combined.charAt(sep) === '／' ? 1 : 1)).trim()];
-                                                if (combined.indexOf(' / ') >= 0) {
-                                                    parts = combined.split(' / ');
-                                                } else if (combined.indexOf('／') >= 0) {
-                                                    parts = combined.split('／');
-                                                }
-                                                if (parts.length >= 2) {
-                                                    return { name: parts[0].trim(), id: parts[1].trim() };
-                                                }
+                                        // 从课程单元格中提取名称和编号
+                                        // 优先从 DOM 子元素获取，其次按分隔符拆分
+                                        function extractCourseInfo(cell) {
+                                            if (!cell) return { name: '', id: '' };
+                                            
+                                            // 方法1：检查单元格的子元素（如 span/div 分别包含名称和编号）
+                                            var container = cell.querySelector('.cell') || cell;
+                                            var childNodes = container.childNodes;
+                                            var textParts = [];
+                                            for (var i = 0; i < childNodes.length; i++) {
+                                                var node = childNodes[i];
+                                                var t = (node.textContent || node.nodeValue || '').trim();
+                                                // 过滤掉空文本和分隔符
+                                                if (t && t !== '/' && t !== '／' && t !== '-') textParts.push(t);
                                             }
-                                            // 无分隔符，用正则匹配末尾的课程编号
-                                            var m = combined.match(/^(.+?)\s*([A-Z]{1,6}\w{2,})\s*$/);
+                                            if (textParts.length >= 2) {
+                                                return { name: textParts[0], id: textParts[1] };
+                                            }
+                                            
+                                            var text = (cell.innerText || cell.textContent || '').trim();
+                                            
+                                            // 方法2：按换行符拆分
+                                            var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
+                                            if (lines.length >= 2) {
+                                                return { name: lines[0], id: lines[1] };
+                                            }
+                                            
+                                            // 方法3：按 " / " 或 "／" 分隔符拆分
+                                            if (text.indexOf(' / ') > 0) {
+                                                var parts = text.split(' / ');
+                                                return { name: parts[0].trim(), id: parts.slice(1).join(' / ').trim() };
+                                            }
+                                            if (text.indexOf('／') > 0) {
+                                                var parts = text.split('／');
+                                                return { name: parts[0].trim(), id: parts.slice(1).join('／').trim() };
+                                            }
+                                            
+                                            // 方法4：正则 - 在最后一个中文/CJK字符或CJK标点后面拆分
+                                            // 课程名以中文结尾或以中文+少量字母结尾，编号以字母+数字开头
+                                            // 使用贪婪匹配确保名称尽量长
+                                            var m = text.match(/^([\s\S]*[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef()])([A-Z]{2,5}\d{3,}\w*)\s*$/);
                                             if (m) return { name: m[1].trim(), id: m[2].trim() };
-                                            m = combined.match(/^(.+?)\s*(\d{4,}[A-Za-z]*)\s*$/);
+                                            // 如果课程名以字母结尾（如"电路A"），匹配中文后跟字母再跟课程编号
+                                            m = text.match(/^([\s\S]*[\u4e00-\u9fff][A-Za-z]{0,4})([A-Z]{2,5}\d{3,}\w*)\s*$/);
                                             if (m) return { name: m[1].trim(), id: m[2].trim() };
-                                            return { name: combined.trim(), id: '' };
+                                            
+                                            return { name: text.trim(), id: '' };
                                         }
                                         
                                         // 从表头检测列映射
@@ -291,9 +313,9 @@ class WebViewGradeFetcher @Inject constructor(
                                                 var g = { semester: '', courseId: '', courseName: '', credit: '0', score: '', gradePoint: '', courseType: '', examType: '' };
                                                 
                                                 if (colMap) {
-                                                    // 课程列
+                                                    // 课程列（从 DOM 子元素提取名称和编号）
                                                     var courseCol = colMap.course !== undefined ? colMap.course : 0;
-                                                    var info = splitCourseNameId(cells[courseCol]?.innerText?.trim() || '');
+                                                    var info = extractCourseInfo(cells[courseCol]);
                                                     g.courseId = info.id;
                                                     g.courseName = info.name;
                                                     // 其他列
@@ -305,7 +327,7 @@ class WebViewGradeFetcher @Inject constructor(
                                                     if (colMap.examType !== undefined) g.examType = cells[colMap.examType]?.innerText?.trim() || '';
                                                 } else {
                                                     // 默认: [0]=课程, [1]=学时, [2]=学分, [3]=绩点, [4]=成绩
-                                                    var info = splitCourseNameId(cells[0]?.innerText?.trim() || '');
+                                                    var info = extractCourseInfo(cells[0]);
                                                     g.courseId = info.id;
                                                     g.courseName = info.name;
                                                     g.credit = cells[2]?.innerText?.trim() || '0';

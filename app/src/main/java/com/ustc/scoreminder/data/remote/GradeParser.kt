@@ -157,13 +157,14 @@ class GradeParser @Inject constructor() {
                 )
             }
         }
-        // 匹配末尾的课程编号（字母开头如 MATH1006, HS1580M）
-        val pattern1 = Regex("""^(.+?)\s*([A-Z]{1,6}\w{2,})\s*$""")
+        // 在最后一个CJK字符/标点后拆分课程编号
+        // 课程编号格式: 2-5个大写字母 + 3位以上数字 + 可选后缀
+        val pattern1 = Regex("""^(.*[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef()])([A-Z]{2,5}\d{3,}\w*)\s*$""")
         pattern1.find(combined)?.let {
             return Pair(it.groupValues[1].trim(), it.groupValues[2].trim())
         }
-        // 匹配纯数字编号
-        val pattern2 = Regex("""^(.+?)\s*(\d{4,}[A-Za-z]*)\s*$""")
+        // 如果课程名以字母结尾（如"电路A"），匹配中文后跟字母再跟课程编号
+        val pattern2 = Regex("""^(.*[\u4e00-\u9fff][A-Za-z]{0,4})([A-Z]{2,5}\d{3,}\w*)\s*$""")
         pattern2.find(combined)?.let {
             return Pair(it.groupValues[1].trim(), it.groupValues[2].trim())
         }
