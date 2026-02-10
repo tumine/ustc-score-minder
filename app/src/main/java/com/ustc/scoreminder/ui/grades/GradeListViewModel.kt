@@ -1,7 +1,9 @@
 package com.ustc.scoreminder.ui.grades
 
+import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ustc.scoreminder.data.local.CredentialsManager
 import com.ustc.scoreminder.data.repository.GradeRepository
 import com.ustc.scoreminder.domain.model.Grade
 import com.ustc.scoreminder.domain.usecase.SyncGradesUseCase
@@ -13,7 +15,8 @@ import javax.inject.Inject
 @HiltViewModel
 class GradeListViewModel @Inject constructor(
     private val gradeRepository: GradeRepository,
-    private val syncGradesUseCase: SyncGradesUseCase
+    private val syncGradesUseCase: SyncGradesUseCase,
+    private val credentialsManager: CredentialsManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(GradeListUiState())
@@ -108,6 +111,17 @@ class GradeListViewModel @Inject constructor(
      */
     fun clearSemesterSelection() {
         _selectedSemesters.value = emptySet()
+    }
+    
+    /**
+     * 退出登录：清除凭证和 cookies
+     */
+    fun logout() {
+        credentialsManager.clearCredentials()
+        CookieManager.getInstance().apply {
+            removeAllCookies(null)
+            flush()
+        }
     }
 }
 

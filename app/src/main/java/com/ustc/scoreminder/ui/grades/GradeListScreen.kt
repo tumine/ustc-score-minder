@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -25,6 +25,7 @@ import com.ustc.scoreminder.domain.model.Grade
 @Composable
 fun GradeListScreen(
     onNavigateToSettings: () -> Unit,
+    onLogout: () -> Unit,
     viewModel: GradeListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -39,22 +40,43 @@ fun GradeListScreen(
                 title = { Text("我的成绩") },
                 actions = {
                     // 筛选按钮
-                    IconButton(onClick = { showFilter = !showFilter }) {
-                        BadgedBox(
-                            badge = {
-                                if (selectedSemesters.isNotEmpty()) {
-                                    Badge { Text("${selectedSemesters.size}") }
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("筛选学期") } },
+                        state = rememberTooltipState()
+                    ) {
+                        IconButton(onClick = { showFilter = !showFilter }) {
+                            BadgedBox(
+                                badge = {
+                                    if (selectedSemesters.isNotEmpty()) {
+                                        Badge { Text("${selectedSemesters.size}") }
+                                    }
                                 }
+                            ) {
+                                Icon(Icons.Default.FilterList, contentDescription = "筛选学期")
                             }
-                        ) {
-                            Icon(Icons.Default.FilterList, contentDescription = "筛选学期")
                         }
                     }
-                    IconButton(onClick = viewModel::syncGrades) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("刷新成绩") } },
+                        state = rememberTooltipState()
+                    ) {
+                        IconButton(onClick = viewModel::syncGrades) {
+                            Icon(Icons.Default.Refresh, contentDescription = "刷新成绩")
+                        }
                     }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("退出登录") } },
+                        state = rememberTooltipState()
+                    ) {
+                        IconButton(onClick = {
+                            viewModel.logout()
+                            onLogout()
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "退出登录")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

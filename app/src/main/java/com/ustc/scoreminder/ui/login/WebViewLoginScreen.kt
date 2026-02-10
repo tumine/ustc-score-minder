@@ -87,11 +87,8 @@ fun WebViewLoginScreen(
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     }
                     
-                    // Clear cookies to ensure fresh login
-                    CookieManager.getInstance().apply {
-                        removeAllCookies(null)
-                        flush()
-                    }
+                    // 不清除 cookies，保留已有的登录会话
+                    // 如果 cookies 仍然有效，WebView 会自动使用它们
                     
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {

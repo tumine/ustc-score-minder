@@ -48,7 +48,17 @@ class LoginUseCase @Inject constructor(
     fun hasCredentials(): Boolean = credentialsManager.hasCredentials()
     
     /**
-     * 登出（清除凭证）
+     * 检查是否有保存的 cookies
+     */
+    fun hasCookies(): Boolean = credentialsManager.hasCookies()
+    
+    /**
+     * 检查是否有有效的登录会话（凭证或 cookies）
+     */
+    fun hasValidSession(): Boolean = hasCredentials() || hasCookies()
+    
+    /**
+     * 登出（清除凭证和 cookies）
      */
     fun logout() {
         credentialsManager.clearCredentials()

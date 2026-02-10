@@ -1,5 +1,6 @@
 package com.ustc.scoreminder.ui.settings
 
+import android.webkit.CookieManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -40,6 +41,11 @@ class SettingsViewModel @Inject constructor(
     
     fun logout() {
         credentialsManager.clearCredentials()
+        // 同时清除 WebView 的 cookies
+        CookieManager.getInstance().apply {
+            removeAllCookies(null)
+            flush()
+        }
         uiState = uiState.copy(isLoggedIn = false)
     }
 }
