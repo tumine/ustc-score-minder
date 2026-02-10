@@ -33,6 +33,30 @@ fun GradeListScreen(
     val allSemesters by viewModel.allSemesters.collectAsState()
     val selectedSemesters by viewModel.selectedSemesters.collectAsState()
     var showFilter by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // 退出登录确认对话框
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("退出登录") },
+            text = { Text("确定要退出登录吗？退出后需要重新登录才能查看成绩。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    viewModel.logout()
+                    onLogout()
+                }) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -71,10 +95,7 @@ fun GradeListScreen(
                         tooltip = { PlainTooltip { Text("退出登录") } },
                         state = rememberTooltipState()
                     ) {
-                        IconButton(onClick = {
-                            viewModel.logout()
-                            onLogout()
-                        }) {
+                        IconButton(onClick = { showLogoutDialog = true }) {
                             Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "退出登录")
                         }
                     }

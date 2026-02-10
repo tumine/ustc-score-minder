@@ -16,11 +16,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 /**
  * WebView 登录屏幕
  * 使用系统 WebView 处理复杂的 CAS 认证流程
+ * 通过 JavaScript 注入捕获用户输入的用户名和密码
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebViewLoginScreen(
-    onLoginSuccess: (cookies: String) -> Unit,
+    onLoginSuccess: (username: String, password: String) -> Unit,
     onLoginCancel: () -> Unit
 ) {
     val loginUrl = "https://passport.ustc.edu.cn/login?service=https://jw.ustc.edu.cn/ucas-sso/login"
@@ -29,6 +30,14 @@ fun WebViewLoginScreen(
     var isLoading by remember { mutableStateOf(true) }
     var loadingProgress by remember { mutableIntStateOf(0) }
     var currentUrl by remember { mutableStateOf(loginUrl) }
+    
+    // 用于存储 JS 捕获的凭证
+    val credentialsHolder = remember {
+        object {
+            @Volatile var username: String = ""
+            @Volatile var password: String = ""
+        }
+    }
     
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部进度条
@@ -87,8 +96,15 @@ fun WebViewLoginScreen(
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     }
                     
-                    // 不清除 cookies，保留已有的登录会话
-                    // 如果 cookies 仍然有效，WebView 会自动使用它们
+                    // 添加 JavaScript 接口用于接收捕获的凭证
+                    addJavascriptInterface(object {
+                        @JavascriptInterface
+                        fun captureCredentials(username: String, password: String) {
+                            Log.d("WebViewLogin", "Credentials captured for user: $username")
+                            credentialsHolder.username = username
+                            credentialsHolder.password = password
+                        }
+                    }, "AndroidBridge")
                     
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -102,19 +118,24 @@ fun WebViewLoginScreen(
                             super.onPageFinished(view, url)
                             isLoading = false
                             
-                            url?.let { 
+                            url?.let {
                                 currentUrl = it
                                 Log.d("WebViewLogin", "Page finished: $it")
+                                
+                                // 在登录页面注入 JS 捕获用户名和密码
+                                if (it.contains("passport.ustc.edu.cn")) {
+                                    injectCredentialCaptureScript(view)
+                                }
                                 
                                 // 检查是否登录成功（到达教务系统页面）
                                 if (it.contains(successUrlPattern) && !it.contains("login")) {
                                     Log.d("WebViewLogin", "Login successful! URL: $it")
+                                    Log.d("WebViewLogin", "Captured username: ${credentialsHolder.username}")
                                     
-                                    // 获取 cookies
-                                    val cookies = CookieManager.getInstance().getCookie(it) ?: ""
-                                    Log.d("WebViewLogin", "Cookies: $cookies")
-                                    
-                                    onLoginSuccess(cookies)
+                                    onLoginSuccess(
+                                        credentialsHolder.username,
+                                        credentialsHolder.password
+                                    )
                                 }
                             }
                         }
@@ -160,4 +181,50 @@ fun WebViewLoginScreen(
             }
         )
     }
+}
+
+/**
+ * 注入 JavaScript 脚本，在用户提交登录表单时捕获用户名和密码
+ */
+private fun injectCredentialCaptureScript(webView: WebView?) {
+    val js = """
+        (function() {
+            if (window._credentialCaptureInjected) return;
+            window._credentialCaptureInjected = true;
+            
+            function captureAndSend() {
+                var usernameInput = document.querySelector('#username') 
+                    || document.querySelector('input[name="username"]')
+                    || document.querySelector('input[type="text"]');
+                var passwordInput = document.querySelector('#password') 
+                    || document.querySelector('input[name="password"]')
+                    || document.querySelector('input[type="password"]');
+                    
+                if (usernameInput && passwordInput && usernameInput.value && passwordInput.value) {
+                    AndroidBridge.captureCredentials(usernameInput.value, passwordInput.value);
+                }
+            }
+            
+            // 拦截表单提交
+            var forms = document.querySelectorAll('form');
+            forms.forEach(function(form) {
+                form.addEventListener('submit', captureAndSend, true);
+            });
+            
+            // 拦截登录按钮点击
+            var buttons = document.querySelectorAll('button[type="submit"], input[type="submit"], #login, .login-btn');
+            buttons.forEach(function(btn) {
+                btn.addEventListener('click', captureAndSend, true);
+            });
+            
+            // 拦截 Enter 键提交
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.keyCode === 13) {
+                    captureAndSend();
+                }
+            }, true);
+        })();
+    """.trimIndent()
+    
+    webView?.evaluateJavascript(js, null)
 }

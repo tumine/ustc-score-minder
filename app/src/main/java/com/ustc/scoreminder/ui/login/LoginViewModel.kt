@@ -32,11 +32,14 @@ class LoginViewModel @Inject constructor(
     
     /**
      * WebView 登录成功回调
-     * @param cookies 登录成功后的 cookies
+     * @param username 用户名（学号）
+     * @param password 密码
      */
-    fun onWebViewLoginSuccess(cookies: String) {
-        // 保存 cookies 以便下次跳过登录
-        credentialsManager.saveCookies(cookies)
+    fun onWebViewLoginSuccess(username: String, password: String) {
+        // 加密保存用户名和密码
+        if (username.isNotBlank() && password.isNotBlank()) {
+            credentialsManager.saveCredentials(username, password)
+        }
         uiState = uiState.copy(isLoggedIn = true)
     }
 }

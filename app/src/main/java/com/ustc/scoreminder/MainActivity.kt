@@ -46,8 +46,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
                     
-                    // 根据登录状态决定起始页面（凭证或 cookies 有效时跳过登录）
-                    val startDestination = if (credentialsManager.hasCredentials() || credentialsManager.hasCookies()) {
+                    // 根据是否有保存的凭证决定起始页面
+                    val startDestination = if (credentialsManager.hasCredentials()) {
                         Routes.GRADES
                     } else {
                         Routes.LOGIN

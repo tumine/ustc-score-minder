@@ -39,21 +39,10 @@ class CredentialsManager @Inject constructor(
     
     fun hasCredentials(): Boolean = getUsername() != null && getPassword() != null
     
-    fun saveCookies(cookies: String) {
-        sharedPreferences.edit()
-            .putString(KEY_COOKIES, cookies)
-            .apply()
-    }
-    
-    fun getCookies(): String? = sharedPreferences.getString(KEY_COOKIES, null)
-    
-    fun hasCookies(): Boolean = !getCookies().isNullOrBlank()
-    
     fun clearCredentials() {
         sharedPreferences.edit()
             .remove(KEY_USERNAME)
             .remove(KEY_PASSWORD)
-            .remove(KEY_COOKIES)
             .apply()
     }
     
@@ -79,7 +68,6 @@ class CredentialsManager @Inject constructor(
         private const val PREFS_NAME = "ustc_score_minder_encrypted_prefs"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
-        private const val KEY_COOKIES = "cookies"
         private const val KEY_SYNC_INTERVAL = "sync_interval_minutes"
         private const val KEY_NOTIFICATION_ENABLED = "notification_enabled"
         private const val DEFAULT_SYNC_INTERVAL = 30 // 默认30分钟

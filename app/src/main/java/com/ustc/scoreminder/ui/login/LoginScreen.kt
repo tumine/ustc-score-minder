@@ -25,8 +25,8 @@ fun LoginScreen(
     if (showWebViewLogin) {
         // WebView 登录界面
         WebViewLoginScreen(
-            onLoginSuccess = { cookies ->
-                viewModel.onWebViewLoginSuccess(cookies)
+            onLoginSuccess = { username, password ->
+                viewModel.onWebViewLoginSuccess(username, password)
             },
             onLoginCancel = {
                 showWebViewLogin = false
