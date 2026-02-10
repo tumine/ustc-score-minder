@@ -22,9 +22,27 @@ class GradeListViewModel @Inject constructor(
     private val _grades = MutableStateFlow<List<Grade>>(emptyList())
     val grades: StateFlow<List<Grade>> = _grades.asStateFlow()
     
-    // 按学期分组的成绩
+    // 所有可用学期（按降序排列）
+    val allSemesters: StateFlow<List<String>> = _grades.map { grades ->
+        grades.map { it.semester }.distinct().sortedDescending()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    
+    // 已选中的学期（空集合 = 显示全部）
+    private val _selectedSemesters = MutableStateFlow<Set<String>>(emptySet())
+    val selectedSemesters: StateFlow<Set<String>> = _selectedSemesters.asStateFlow()
+    
+    // 按学期分组的成绩（保留用于向后兼容）
     val gradesBySemester: StateFlow<Map<String, List<Grade>>> = _grades.map { grades ->
         grades.groupBy { it.semester }
+            .toSortedMap(compareByDescending { it })
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    
+    // 根据筛选条件过滤后的成绩（按学期分组）
+    val filteredGradesBySemester: StateFlow<Map<String, List<Grade>>> = combine(
+        _grades, _selectedSemesters
+    ) { grades, selected ->
+        val filtered = if (selected.isEmpty()) grades else grades.filter { it.semester in selected }
+        filtered.groupBy { it.semester }
             .toSortedMap(compareByDescending { it })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     
@@ -68,6 +86,29 @@ class GradeListViewModel @Inject constructor(
     fun clearNewGradesAlert() {
         _uiState.update { it.copy(newGradesCount = 0) }
     }
+    
+    /**
+     * 切换某个学期的选中状态
+     */
+    fun toggleSemester(semester: String) {
+        _selectedSemesters.update { current ->
+            if (semester in current) current - semester else current + semester
+        }
+    }
+    
+    /**
+     * 选中所有学期
+     */
+    fun selectAllSemesters() {
+        _selectedSemesters.value = allSemesters.value.toSet()
+    }
+    
+    /**
+     * 清空选择（显示全部）
+     */
+    fun clearSemesterSelection() {
+        _selectedSemesters.value = emptySet()
+    }
 }
 
 data class GradeListUiState(
@@ -76,3 +117,4 @@ data class GradeListUiState(
     val lastSyncTime: Long? = null,
     val newGradesCount: Int = 0
 )
+

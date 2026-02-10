@@ -212,26 +212,113 @@ class WebViewGradeFetcher @Inject constructor(
                                     (function() {
                                         var grades = [];
                                         
-                                        // 方法1: 从表格行提取
-                                        var rows = document.querySelectorAll('.el-table__body tr, table.my-table tbody tr, table tbody tr');
-                                        
-                                        rows.forEach(function(row) {
-                                            var cells = row.querySelectorAll('td');
-                                            if (cells.length >= 5) {
-                                                var grade = {
-                                                    semester: cells[0]?.innerText?.trim() || '',
-                                                    courseId: cells[1]?.innerText?.trim() || '',
-                                                    courseName: cells[2]?.innerText?.trim() || '',
-                                                    credit: cells[3]?.innerText?.trim() || '0',
-                                                    score: cells[4]?.innerText?.trim() || '',
-                                                    gradePoint: cells[5]?.innerText?.trim() || '',
-                                                    courseType: cells[6]?.innerText?.trim() || '',
-                                                    examType: cells[7]?.innerText?.trim() || ''
-                                                };
-                                                if (grade.courseId && grade.courseName) {
-                                                    grades.push(grade);
+                                        // 从课程列中拆分名称和编号
+                                        // 处理 "数学分析(B1) / MATH1006" 或 "军事技能MIL1002" 格式
+                                        function splitCourseNameId(combined) {
+                                            if (!combined) return { name: '', id: '' };
+                                            // 优先按 " / " 或 "／" 分隔符拆分
+                                            var sep = combined.indexOf(' / ');
+                                            if (sep < 0) sep = combined.indexOf('／');
+                                            if (sep < 0) sep = combined.indexOf('/');
+                                            if (sep > 0) {
+                                                var parts = [combined.substring(0, sep).trim(), combined.substring(sep + (combined.charAt(sep) === '/' && combined.charAt(sep+1) === ' ' ? 3 : combined.charAt(sep) === '／' ? 1 : 1)).trim()];
+                                                if (combined.indexOf(' / ') >= 0) {
+                                                    parts = combined.split(' / ');
+                                                } else if (combined.indexOf('／') >= 0) {
+                                                    parts = combined.split('／');
+                                                }
+                                                if (parts.length >= 2) {
+                                                    return { name: parts[0].trim(), id: parts[1].trim() };
                                                 }
                                             }
+                                            // 无分隔符，用正则匹配末尾的课程编号
+                                            var m = combined.match(/^(.+?)\s*([A-Z]{1,6}\w{2,})\s*$/);
+                                            if (m) return { name: m[1].trim(), id: m[2].trim() };
+                                            m = combined.match(/^(.+?)\s*(\d{4,}[A-Za-z]*)\s*$/);
+                                            if (m) return { name: m[1].trim(), id: m[2].trim() };
+                                            return { name: combined.trim(), id: '' };
+                                        }
+                                        
+                                        // 从表头检测列映射
+                                        function detectColumnMap(table) {
+                                            var headers = table.querySelectorAll('thead th, .el-table__header th');
+                                            if (!headers || headers.length === 0) return null;
+                                            var map = {};
+                                            headers.forEach(function(th, i) {
+                                                var t = (th.innerText || '').trim();
+                                                if (t === '课程' || t.indexOf('课程名') >= 0 || t.indexOf('课程编') >= 0) map.course = i;
+                                                else if (t.indexOf('学期') >= 0) map.semester = i;
+                                                else if (t.indexOf('学时') >= 0) map.hours = i;
+                                                else if (t.indexOf('学分') >= 0) map.credit = i;
+                                                else if (t.indexOf('绩点') >= 0) map.gradePoint = i;
+                                                else if (t.indexOf('成绩') >= 0 || t.indexOf('分数') >= 0) map.score = i;
+                                                else if (t.indexOf('类') >= 0 || t.indexOf('属性') >= 0) map.courseType = i;
+                                                else if (t.indexOf('考试') >= 0) map.examType = i;
+                                            });
+                                            return Object.keys(map).length > 0 ? map : null;
+                                        }
+                                        
+                                        // 从页面结构获取学期
+                                        function findSemester(table) {
+                                            // 向上查找含 "学期" 或年份的元素
+                                            var el = table;
+                                            while (el && el !== document.body) {
+                                                var prev = el.previousElementSibling;
+                                                while (prev) {
+                                                    var text = (prev.innerText || '').trim();
+                                                    if (text.match(/\d{4}.*[学期春秋冬夏]/) || text.match(/^\d{4}[-\/]\d{4}[-\/]?\d?$/)) return text;
+                                                    prev = prev.previousElementSibling;
+                                                }
+                                                el = el.parentElement;
+                                            }
+                                            // 尝试 tab
+                                            var tab = document.querySelector('.el-tabs__item.is-active');
+                                            if (tab) return (tab.innerText || '').trim();
+                                            return '';
+                                        }
+                                        
+                                        var tables = document.querySelectorAll('.el-table, table');
+                                        
+                                        tables.forEach(function(table) {
+                                            var colMap = detectColumnMap(table);
+                                            var semester = findSemester(table);
+                                            var rows = table.querySelectorAll('.el-table__body tr, tbody tr');
+                                            
+                                            rows.forEach(function(row) {
+                                                var cells = row.querySelectorAll('td');
+                                                if (cells.length < 3) return;
+                                                
+                                                var g = { semester: '', courseId: '', courseName: '', credit: '0', score: '', gradePoint: '', courseType: '', examType: '' };
+                                                
+                                                if (colMap) {
+                                                    // 课程列
+                                                    var courseCol = colMap.course !== undefined ? colMap.course : 0;
+                                                    var info = splitCourseNameId(cells[courseCol]?.innerText?.trim() || '');
+                                                    g.courseId = info.id;
+                                                    g.courseName = info.name;
+                                                    // 其他列
+                                                    if (colMap.semester !== undefined) g.semester = cells[colMap.semester]?.innerText?.trim() || '';
+                                                    if (colMap.credit !== undefined) g.credit = cells[colMap.credit]?.innerText?.trim() || '0';
+                                                    if (colMap.gradePoint !== undefined) g.gradePoint = cells[colMap.gradePoint]?.innerText?.trim() || '';
+                                                    if (colMap.score !== undefined) g.score = cells[colMap.score]?.innerText?.trim() || '';
+                                                    if (colMap.courseType !== undefined) g.courseType = cells[colMap.courseType]?.innerText?.trim() || '';
+                                                    if (colMap.examType !== undefined) g.examType = cells[colMap.examType]?.innerText?.trim() || '';
+                                                } else {
+                                                    // 默认: [0]=课程, [1]=学时, [2]=学分, [3]=绩点, [4]=成绩
+                                                    var info = splitCourseNameId(cells[0]?.innerText?.trim() || '');
+                                                    g.courseId = info.id;
+                                                    g.courseName = info.name;
+                                                    g.credit = cells[2]?.innerText?.trim() || '0';
+                                                    g.gradePoint = cells[3]?.innerText?.trim() || '';
+                                                    g.score = cells[4]?.innerText?.trim() || '';
+                                                }
+                                                
+                                                if (!g.semester) g.semester = semester || '';
+                                                
+                                                if (g.courseName || g.courseId) {
+                                                    grades.push(g);
+                                                }
+                                            });
                                         });
                                         
                                         return JSON.stringify(grades);

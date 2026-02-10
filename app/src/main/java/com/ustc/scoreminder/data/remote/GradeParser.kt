@@ -35,31 +35,32 @@ class GradeParser @Inject constructor() {
             for (row in gradeRows) {
                 try {
                     val cells = row.select("td")
-                    if (cells.size < 4) continue
+                    if (cells.size < 3) continue
                     
-                    // 根据表格列顺序提取数据
-                    // 具体列的位置可能需要根据实际页面调整
-                    val semester = cells.getOrNull(0)?.text()?.trim() ?: continue
-                    val courseId = cells.getOrNull(1)?.text()?.trim() ?: continue
-                    val courseName = cells.getOrNull(2)?.text()?.trim() ?: continue
-                    val creditStr = cells.getOrNull(3)?.text()?.trim() ?: "0"
+                    // 实际 USTC 表格列顺序:
+                    // [0]=课程名称+编号, [1]=总学时, [2]=学分, [3]=绩点, [4]=成绩
+                    val combined = cells.getOrNull(0)?.text()?.trim() ?: continue
+                    val creditStr = cells.getOrNull(2)?.text()?.trim() ?: "0"
+                    val gradePointStr = cells.getOrNull(3)?.text()?.trim() ?: ""
                     val score = cells.getOrNull(4)?.text()?.trim() ?: ""
-                    val gradePointStr = cells.getOrNull(5)?.text()?.trim() ?: ""
-                    val courseType = cells.getOrNull(6)?.text()?.trim()
-                    val examType = cells.getOrNull(7)?.text()?.trim()
+                    val courseType = cells.getOrNull(5)?.text()?.trim()
+                    val examType = cells.getOrNull(6)?.text()?.trim()
+                    
+                    // 拆分合并的课程名称和编号
+                    val (courseName, courseId) = splitCourseNameId(combined)
                     
                     val credit = creditStr.toFloatOrNull() ?: 0f
                     val gradePoint = gradePointStr.toFloatOrNull()
                     
-                    if (courseId.isNotEmpty() && courseName.isNotEmpty()) {
+                    if (courseName.isNotEmpty()) {
                         grades.add(
                             Grade(
-                                courseId = courseId,
+                                courseId = courseId.ifEmpty { courseName },
                                 courseName = courseName,
                                 credit = credit,
                                 score = score,
                                 gradePoint = gradePoint,
-                                semester = semester,
+                                semester = "", // 学期从页面结构中获取
                                 courseType = courseType,
                                 examType = examType
                             )
@@ -137,5 +138,35 @@ class GradeParser @Inject constructor() {
         pattern.findAll(scriptContent).forEach { match ->
             Log.d(TAG, "Found course code in script: ${match.groupValues[1]}")
         }
+    }
+    
+    /**
+     * 拆分合并的课程名称和编号
+     * 如 "数学分析(B1) / MATH1006" -> Pair("数学分析(B1)", "MATH1006")
+     * 或 "军事技能MIL1002" -> Pair("军事技能", "MIL1002")
+     */
+    private fun splitCourseNameId(combined: String): Pair<String, String> {
+        // 优先按 " / " 或 "／" 分隔符拆分
+        val separators = listOf(" / ", "／", " /", "/ ")
+        for (sep in separators) {
+            val idx = combined.indexOf(sep)
+            if (idx > 0) {
+                return Pair(
+                    combined.substring(0, idx).trim(),
+                    combined.substring(idx + sep.length).trim()
+                )
+            }
+        }
+        // 匹配末尾的课程编号（字母开头如 MATH1006, HS1580M）
+        val pattern1 = Regex("""^(.+?)\s*([A-Z]{1,6}\w{2,})\s*$""")
+        pattern1.find(combined)?.let {
+            return Pair(it.groupValues[1].trim(), it.groupValues[2].trim())
+        }
+        // 匹配纯数字编号
+        val pattern2 = Regex("""^(.+?)\s*(\d{4,}[A-Za-z]*)\s*$""")
+        pattern2.find(combined)?.let {
+            return Pair(it.groupValues[1].trim(), it.groupValues[2].trim())
+        }
+        return Pair(combined, "")
     }
 }
