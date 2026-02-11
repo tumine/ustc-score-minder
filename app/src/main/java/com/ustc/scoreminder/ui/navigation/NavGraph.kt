@@ -37,11 +37,6 @@ fun NavGraph(
             GradeListScreen(
                 onNavigateToSettings = {
                     navController.navigate(Routes.SETTINGS)
-                },
-                onLogout = {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.GRADES) { inclusive = true }
-                    }
                 }
             )
         }

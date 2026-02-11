@@ -21,12 +21,14 @@ fun SettingsScreen(
 ) {
     val uiState = viewModel.uiState
     var showIntervalDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
     
-    LaunchedEffect(uiState.isLoggedIn) {
-        if (!uiState.isLoggedIn) {
-            onLogout()
-        }
-    }
+    // Debug: 暂时注释掉自动登出逻辑，排查是否因 isLoggedIn 状态误判导致自动跳转
+//    LaunchedEffect(uiState.isLoggedIn) {
+//        if (!uiState.isLoggedIn) {
+//            onLogout()
+//        }
+//    }
     
     Scaffold(
         topBar = {
@@ -74,7 +76,9 @@ fun SettingsScreen(
                 SettingsItem(
                     title = "退出登录",
                     textColor = MaterialTheme.colorScheme.error,
-                    onClick = viewModel::logout
+                    onClick = {
+                        showLogoutDialog = true
+                    }
                 )
             }
             
@@ -101,6 +105,29 @@ fun SettingsScreen(
                 showIntervalDialog = false
             },
             onDismiss = { showIntervalDialog = false }
+        )
+    }
+
+    // 退出登录确认对话框
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("退出登录") },
+            text = { Text("确定要退出登录吗？退出后需要重新登录才能查看成绩。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutDialog = false
+                    viewModel.logout()
+                    onLogout()
+                }) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("取消")
+                }
+            }
         )
     }
 }

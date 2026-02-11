@@ -113,16 +113,6 @@ class GradeListViewModel @Inject constructor(
         _selectedSemesters.value = emptySet()
     }
     
-    /**
-     * 退出登录：清除凭证和 cookies
-     */
-    fun logout() {
-        credentialsManager.clearCredentials()
-        CookieManager.getInstance().apply {
-            removeAllCookies(null)
-            flush()
-        }
-    }
 }
 
 data class GradeListUiState(
@@ -131,4 +121,3 @@ data class GradeListUiState(
     val lastSyncTime: Long? = null,
     val newGradesCount: Int = 0
 )
-

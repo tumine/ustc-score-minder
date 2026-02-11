@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -25,7 +26,6 @@ import com.ustc.scoreminder.domain.model.Grade
 @Composable
 fun GradeListScreen(
     onNavigateToSettings: () -> Unit,
-    onLogout: () -> Unit,
     viewModel: GradeListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -33,36 +33,24 @@ fun GradeListScreen(
     val allSemesters by viewModel.allSemesters.collectAsState()
     val selectedSemesters by viewModel.selectedSemesters.collectAsState()
     var showFilter by remember { mutableStateOf(false) }
-    var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // 退出登录确认对话框
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("退出登录") },
-            text = { Text("确定要退出登录吗？退出后需要重新登录才能查看成绩。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showLogoutDialog = false
-                    viewModel.logout()
-                    onLogout()
-                }) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
+
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("我的成绩") },
                 actions = {
+                    // 设置按钮
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("设置") } },
+                        state = rememberTooltipState()
+                    ) {
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "设置")
+                        }
+                    }
                     // 筛选按钮
                     TooltipBox(
                         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
@@ -90,15 +78,7 @@ fun GradeListScreen(
                             Icon(Icons.Default.Refresh, contentDescription = "刷新成绩")
                         }
                     }
-                    TooltipBox(
-                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                        tooltip = { PlainTooltip { Text("退出登录") } },
-                        state = rememberTooltipState()
-                    ) {
-                        IconButton(onClick = { showLogoutDialog = true }) {
-                            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "退出登录")
-                        }
-                    }
+
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,

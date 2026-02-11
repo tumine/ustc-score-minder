@@ -53,5 +53,5 @@ class SettingsViewModel @Inject constructor(
 data class SettingsUiState(
     val syncIntervalMinutes: Int = 30,
     val notificationEnabled: Boolean = true,
-    val isLoggedIn: Boolean = false
+    val isLoggedIn: Boolean = true
 )
