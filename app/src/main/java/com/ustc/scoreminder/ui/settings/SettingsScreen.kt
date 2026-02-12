@@ -70,6 +70,57 @@ fun SettingsScreen(
             }
             
             HorizontalDivider()
+
+            // 调试信息
+            SettingsSection(title = "调试信息") {
+                val dateFormat = remember {
+                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                }
+
+                SettingsItem(
+                    title = "立即同步",
+                    subtitle = "手动触发一次后台同步",
+                    onClick = {
+                        viewModel.triggerSyncNow()
+                    }
+                )
+
+                val lastSyncText = if (uiState.lastSyncTime > 0) {
+                    dateFormat.format(java.util.Date(uiState.lastSyncTime))
+                } else "从未"
+
+                SettingsItem(
+                    title = "上次同步时间",
+                    subtitle = lastSyncText,
+                    onClick = { viewModel.loadDebugInfo() }
+                )
+
+                var nextSyncText = "未知"
+                if (uiState.nextSyncTime > 0) {
+                    nextSyncText = dateFormat.format(java.util.Date(uiState.nextSyncTime))
+                    val diff = uiState.nextSyncTime - System.currentTimeMillis()
+                    if (diff > 0) {
+                        val minutes = diff / (1000 * 60)
+                        nextSyncText += " (约 ${minutes} 分钟后)"
+                    } else {
+                        nextSyncText += " (即将执行)"
+                    }
+                }
+
+                SettingsItem(
+                    title = "下次同步时间",
+                    subtitle = nextSyncText,
+                    onClick = { viewModel.loadDebugInfo() }
+                )
+
+                SettingsItem(
+                    title = "上次同步结果",
+                    subtitle = uiState.lastSyncResult ?: "无",
+                    onClick = { viewModel.loadDebugInfo() }
+                )
+            }
+            
+            HorizontalDivider()
             
             // 账号设置
             SettingsSection(title = "账号") {
@@ -112,15 +163,17 @@ fun SettingsScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            title = { Text("退出登录") },
-            text = { Text("确定要退出登录吗？退出后需要重新登录才能查看成绩。") },
+            title = { Text("确认退出") },
+            text = { Text("退出登录将清除所有本地保存的成绩数据和凭证。") },
             confirmButton = {
-                TextButton(onClick = {
-                    showLogoutDialog = false
-                    viewModel.logout()
-                    onLogout()
-                }) {
-                    Text("确定")
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        viewModel.logout()
+                        onLogout()
+                    }
+                ) {
+                    Text("退出")
                 }
             },
             dismissButton = {
@@ -130,21 +183,44 @@ fun SettingsScreen(
             }
         )
     }
+
+    // 同步加载弹窗
+    if (uiState.isSyncing) {
+        AlertDialog(
+            onDismissRequest = { /* 禁止点击外部关闭 */ },
+            title = { Text("正在同步") },
+            text = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(36.dp),
+                        strokeWidth = 3.dp
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("正在获取最新成绩...")
+                }
+            },
+            confirmButton = {}
+        )
+    }
 }
 
 @Composable
 private fun SettingsSection(
     title: String,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable () -> Unit
 ) {
-    Column {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = title,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+            modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp)
         )
         content()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     }
 }
 

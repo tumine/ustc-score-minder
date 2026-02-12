@@ -40,13 +40,15 @@ class GradeSyncWorker @AssistedInject constructor(
         }
     }
     
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): ListenableWorker.Result {
         Log.d(TAG, "Starting grade sync work")
         
         // 检查是否有凭证
         if (!credentialsManager.hasCredentials()) {
             Log.d(TAG, "No credentials, skipping sync")
-            return Result.success()
+            credentialsManager.setLastSyncTime(System.currentTimeMillis())
+            credentialsManager.setLastSyncResult("跳过: 无凭证")
+            return ListenableWorker.Result.failure()
         }
         
         // 检查通知设置
@@ -60,17 +62,28 @@ class GradeSyncWorker @AssistedInject constructor(
                     if (result.hasChanges && notificationEnabled && result.newGrades.isNotEmpty()) {
                         notificationHelper.showNewGradeNotification(result.newGrades)
                     }
+
+                    credentialsManager.setLastSyncTime(System.currentTimeMillis())
+                    credentialsManager.setLastSyncResult("成功: 发现 ${result.newGrades.size} 个新成绩")
                     
-                    Result.success()
+                    ListenableWorker.Result.success()
                 },
                 onFailure = { e ->
                     Log.e(TAG, "Sync failed", e)
-                    Result.retry()
+                    credentialsManager.setLastSyncTime(System.currentTimeMillis())
+                    credentialsManager.setLastSyncResult("失败: ${e.message}")
+                    // 对于手动同步，我们可能希望它 Fail 而不是 Retry，以便用户知道出错了
+                    // 这里如果是 OneTimeRequest (runAttemptCount == 0)，我们可以 Fail
+                    // 但为了简单，我们如果是网络错误可能还是想 Retry
+                    // 暂时改为 Failure 以确保 UI 刷新显示错误信息
+                    ListenableWorker.Result.failure() 
                 }
             )
         } catch (e: Exception) {
             Log.e(TAG, "Work failed with exception", e)
-            Result.retry()
+            credentialsManager.setLastSyncTime(System.currentTimeMillis())
+            credentialsManager.setLastSyncResult("异常: ${e.message}")
+            ListenableWorker.Result.failure()
         }
     }
 }

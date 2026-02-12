@@ -71,5 +71,31 @@ class CredentialsManager @Inject constructor(
         private const val KEY_SYNC_INTERVAL = "sync_interval_minutes"
         private const val KEY_NOTIFICATION_ENABLED = "notification_enabled"
         private const val DEFAULT_SYNC_INTERVAL = 30 // 默认30分钟
+        private const val KEY_LAST_SYNC_TIME = "last_sync_time"
+        private const val KEY_LAST_SYNC_RESULT = "last_sync_result"
+    }
+
+    fun setLastSyncTime(time: Long) {
+        sharedPreferences.edit()
+            .putLong(KEY_LAST_SYNC_TIME, time)
+            .apply()
+    }
+
+    fun getLastSyncTime(): Long = sharedPreferences.getLong(KEY_LAST_SYNC_TIME, 0)
+
+    fun setLastSyncResult(result: String) {
+        sharedPreferences.edit()
+            .putString(KEY_LAST_SYNC_RESULT, result)
+            .apply()
+    }
+
+    fun getLastSyncResult(): String? = sharedPreferences.getString(KEY_LAST_SYNC_RESULT, null)
+
+    fun registerOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) {
+        sharedPreferences.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) {
+        sharedPreferences.unregisterOnSharedPreferenceChangeListener(listener)
     }
 }

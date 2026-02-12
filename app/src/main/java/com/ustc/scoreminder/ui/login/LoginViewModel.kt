@@ -9,11 +9,21 @@ import com.ustc.scoreminder.domain.usecase.LoginUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
+import android.content.Context
+import android.util.Log
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.WorkManager
+import com.ustc.scoreminder.worker.GradeSyncWorker
+import dagger.hilt.android.qualifiers.ApplicationContext
+
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val loginUseCase: LoginUseCase,
-    private val credentialsManager: CredentialsManager
+    private val credentialsManager: CredentialsManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
+    
+    private val workManager by lazy { WorkManager.getInstance(context) }
     
     var uiState by mutableStateOf(LoginUiState())
         private set
@@ -28,6 +38,8 @@ class LoginViewModel @Inject constructor(
     fun logout() {
         loginUseCase.logout()
         uiState = LoginUiState()
+        // 取消定时任务
+        workManager.cancelUniqueWork(GradeSyncWorker.WORK_NAME)
     }
     
     /**
@@ -36,10 +48,25 @@ class LoginViewModel @Inject constructor(
      * @param password 密码
      */
     fun onWebViewLoginSuccess(username: String, password: String) {
+        Log.d("LoginViewModel", "onWebViewLoginSuccess: username=$username, passwordLength=${password.length}")
+        
         // 加密保存用户名和密码
         if (username.isNotBlank() && password.isNotBlank()) {
+            Log.d("LoginViewModel", "Saving credentials")
             credentialsManager.saveCredentials(username, password)
+        } else {
+            Log.e("LoginViewModel", "Credentials empty, not saving!")
         }
+        
+        // 登录成功后，立即调度后台同步任务
+        val intervalMinutes = credentialsManager.getSyncIntervalMinutes().toLong()
+        val workRequest = GradeSyncWorker.buildRequest(intervalMinutes)
+        workManager.enqueueUniquePeriodicWork(
+            GradeSyncWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+        
         uiState = uiState.copy(isLoggedIn = true)
     }
 }
