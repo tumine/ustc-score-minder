@@ -44,7 +44,10 @@ class SettingsViewModel @Inject constructor(
 
     // 监听 SharedPreferences 变化以实时更新调试信息
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "last_sync_time" || key == "last_sync_result" || key == "sync_interval_minutes") {
+        if (key == "sync_interval_minutes") {
+            loadSettings()
+            // Don't loadDebugInfo here, wait for manual update in updateSyncInterval
+        } else if (key == "last_sync_time" || key == "last_sync_result") {
             loadDebugInfo()
             loadSettings()
         }
@@ -153,18 +156,26 @@ class SettingsViewModel @Inject constructor(
     fun updateSyncInterval(minutes: Int) {
         credentialsManager.setSyncIntervalMinutes(minutes)
         uiState = uiState.copy(syncIntervalMinutes = minutes)
-        // 更新定时任务
-        // 注意：这里需要重新调度 PeriodicWork，App 类中有 helper 方法，但 ViewModel 最好通过 WorkManager 直接操作
-        // 或者通知 UI 层去处理。为了简单起见，这里假设用户下次重启应用或手动触发时生效，
-        // 但更好的做法是立即重新调度。
-        // 由于 GradeSyncWorker.buildRequest 在 companion object 中，我们可以直接调用。
         
         val workRequest = GradeSyncWorker.buildRequest(minutes.toLong())
-        workManager.enqueueUniquePeriodicWork(
+        val operation = workManager.enqueueUniquePeriodicWork(
             GradeSyncWorker.WORK_NAME,
             androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
+        
+        // 等待 WorkManager 完成重新调度后再更新 UI
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 等待操作完成
+                operation.result.get()
+                // 稍微延迟一下以确保数据库状态已更新
+                kotlinx.coroutines.delay(500)
+                loadDebugInfo()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
     
     fun toggleNotification(enabled: Boolean) {
