@@ -6,6 +6,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
@@ -14,6 +17,7 @@ fun LoginScreen(
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val uiState = viewModel.uiState
+    var showCredentialInput by remember { mutableStateOf(false) }
     var showWebViewLogin by remember { mutableStateOf(false) }
     
     LaunchedEffect(uiState.isLoggedIn) {
@@ -30,7 +34,14 @@ fun LoginScreen(
             },
             onLoginCancel = {
                 showWebViewLogin = false
-            }
+            },
+            onLoginError = {
+                // 登录失败（密码错误），清除凭证并重新显示输入框
+                viewModel.clearCredentials()
+                showWebViewLogin = false
+                showCredentialInput = true
+            },
+            credentials = remember { viewModel.getCredentials() }
         )
     } else {
         // 主登录界面
@@ -71,7 +82,13 @@ fun LoginScreen(
             
             // WebView 登录按钮
             Button(
-                onClick = { showWebViewLogin = true },
+                onClick = { 
+                    if (uiState.hasCredentials) {
+                        showWebViewLogin = true 
+                    } else {
+                        showCredentialInput = true
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -95,5 +112,81 @@ fun LoginScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        
+        if (showCredentialInput) {
+            CredentialInputDialog(
+                onConfirm = { username, password ->
+                    viewModel.saveCredentials(username, password)
+                    showCredentialInput = false
+                    showWebViewLogin = true
+                },
+                onDismiss = {
+                    showCredentialInput = false
+                }
+            )
+        }
     }
+}
+
+@Composable
+fun CredentialInputDialog(
+    onConfirm: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("输入统一身份认证账号") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("学号/工号") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("密码") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (passwordVisible)
+                            androidx.compose.material.icons.Icons.Filled.Visibility
+                        else androidx.compose.material.icons.Icons.Filled.VisibilityOff
+
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(imageVector = image, contentDescription = null)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "您的账号密码将加密存储于本地，仅用于自动登录教务系统。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(username, password) },
+                enabled = username.isNotBlank() && password.isNotBlank()
+            ) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }

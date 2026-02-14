@@ -2,7 +2,6 @@ package com.ustc.scoreminder.data.remote
 
 import android.util.Base64
 import javax.crypto.Cipher
-import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
@@ -12,7 +11,8 @@ import javax.crypto.spec.SecretKeySpec
 object CryptoUtils {
     
     /**
-     * 使用 AES/CBC/PKCS5Padding 加密密码
+     * 使用 AES/ECB/PKCS5Padding 加密密码
+     * USTC CAS 系统使用 AES-ECB 模式（无 IV），密钥来自页面的 login-croypto 元素
      * @param password 明文密码
      * @param key Base64 编码的加密密钥（来自页面的 login-croypto）
      * @return Base64 编码的加密密码
@@ -22,20 +22,12 @@ object CryptoUtils {
             // 解码 Base64 密钥
             val keyBytes = Base64.decode(key, Base64.DEFAULT)
             
-            // 创建密钥规格，使用密钥本身作为 IV（常见的简单实现）
+            // 创建密钥规格
             val secretKey = SecretKeySpec(keyBytes, "AES")
             
-            // 随机 IV 或使用密钥前 16 字节
-            val iv = if (keyBytes.size >= 16) {
-                keyBytes.copyOf(16)
-            } else {
-                ByteArray(16) // 全零 IV
-            }
-            val ivSpec = IvParameterSpec(iv)
-            
-            // 初始化加密器
-            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec)
+            // 初始化加密器 - ECB 模式无需 IV
+            val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
             
             // 加密并返回 Base64 编码结果
             val encryptedBytes = cipher.doFinal(password.toByteArray(Charsets.UTF_8))

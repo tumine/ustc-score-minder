@@ -33,6 +33,7 @@ class LoginViewModel @Inject constructor(
         if (loginUseCase.hasValidSession()) {
             uiState = uiState.copy(isLoggedIn = true)
         }
+        checkHasCredentials()
     }
     
     fun logout() {
@@ -52,8 +53,7 @@ class LoginViewModel @Inject constructor(
         
         // 加密保存用户名和密码
         if (username.isNotBlank() && password.isNotBlank()) {
-            Log.d("LoginViewModel", "Saving credentials")
-            credentialsManager.saveCredentials(username, password)
+            saveCredentials(username, password)
         } else {
             Log.e("LoginViewModel", "Credentials empty, not saving!")
         }
@@ -69,10 +69,36 @@ class LoginViewModel @Inject constructor(
         
         uiState = uiState.copy(isLoggedIn = true)
     }
+
+    fun getCredentials(): Pair<String, String>? {
+        val u = credentialsManager.getUsername()
+        val p = credentialsManager.getPassword()
+        return if (u != null && p != null) u to p else null
+    }
+
+    fun checkHasCredentials() {
+        uiState = uiState.copy(hasCredentials = credentialsManager.hasCredentials())
+        if (uiState.hasCredentials) {
+            Log.d("LoginViewModel", "User has credentials stored")
+        }
+    }
+
+    fun saveCredentials(u: String, p: String) {
+        Log.d("LoginViewModel", "Saving credentials explicitly")
+        credentialsManager.saveCredentials(u, p)
+        checkHasCredentials()
+    }
+    
+    fun clearCredentials() {
+        Log.d("LoginViewModel", "Clearing credentials")
+        credentialsManager.clearCredentials()
+        checkHasCredentials()
+    }
 }
 
 data class LoginUiState(
     val isLoading: Boolean = false,
     val isLoggedIn: Boolean = false,
+    val hasCredentials: Boolean = false,
     val errorMessage: String? = null
 )

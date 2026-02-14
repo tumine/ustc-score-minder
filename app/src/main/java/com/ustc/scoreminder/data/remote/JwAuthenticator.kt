@@ -24,8 +24,8 @@ class JwAuthenticator @Inject constructor(
         private const val GRADE_URL = "$BASE_URL/for-std/grade/sheet"
         private const val LOGIN_URL = "$BASE_URL/login"
         private const val HOME_URL = "$BASE_URL/home"
-        private const val CAS_LOGIN_URL = "https://passport.ustc.edu.cn/login"
-        private const val CAS_LOGIN_API = "https://passport.ustc.edu.cn/login"
+        private const val CAS_LOGIN_URL = "https://id.ustc.edu.cn/cas/login"
+        private const val CAS_LOGIN_API = "https://id.ustc.edu.cn/cas/login"
     }
 
     sealed class LoginResult {
@@ -121,7 +121,7 @@ class JwAuthenticator @Inject constructor(
                 .addHeader("Content-Type", "application/x-www-form-urlencoded")
                 .addHeader("Referer", CAS_LOGIN_URL)
                 .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
-                .addHeader("Origin", "https://passport.ustc.edu.cn")
+                .addHeader("Origin", "https://id.ustc.edu.cn")
                 .post(formBody)
                 .build()
             
@@ -132,7 +132,8 @@ class JwAuthenticator @Inject constructor(
             Log.d(TAG, "Login response URL: $loginResponseUrl")
             
             // 检查是否登录失败（还在登录页面）
-            if (loginResponseUrl.contains("passport.ustc.edu.cn/login") || 
+            if (loginResponseUrl.contains("id.ustc.edu.cn/cas/login") || 
+                loginResponseUrl.contains("id.ustc.edu.cn") ||
                 loginResponseUrl.contains("passport.ustc.edu.cn")) {
                 val errorDoc = Jsoup.parse(loginHtml)
                 // 尝试多种错误消息选择器
