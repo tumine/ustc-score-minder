@@ -92,6 +92,7 @@ fun SettingsScreen(
                 SettingsItem(
                     title = "上次同步时间",
                     subtitle = lastSyncText,
+                    showArrow = false,
                     onClick = { viewModel.loadDebugInfo() }
                 )
 
@@ -110,12 +111,14 @@ fun SettingsScreen(
                 SettingsItem(
                     title = "下次同步时间",
                     subtitle = nextSyncText,
+                    showArrow = false,
                     onClick = { viewModel.loadDebugInfo() }
                 )
 
                 SettingsItem(
                     title = "上次同步结果",
                     subtitle = uiState.lastSyncResult ?: "无",
+                    showArrow = false,
                     onClick = { viewModel.loadDebugInfo() }
                 )
             }
@@ -229,6 +232,7 @@ private fun SettingsItem(
     title: String,
     subtitle: String? = null,
     textColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
+    showArrow: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
@@ -253,11 +257,13 @@ private fun SettingsItem(
                 )
             }
         }
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (showArrow) {
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
