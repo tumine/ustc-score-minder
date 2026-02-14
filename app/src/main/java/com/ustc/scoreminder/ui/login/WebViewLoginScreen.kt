@@ -157,8 +157,9 @@ fun WebViewLoginScreen(
                                         injectAutoFillScript(view, u, p)
                                     }
                                 }
-                                // Case 2: On JW Portal Login Selection Page (Need to click Unified Auth)
-                                else if (it.contains("jw.ustc.edu.cn") && !it.contains("sheet")) {
+                                // Case 2: On JW Portal Login Page - auto-click "统一身份认证登录" button
+                                else if (it.contains("jw.ustc.edu.cn") && it.contains("login")) {
+                                    Log.d("WebViewLogin", "Detected jw login page, auto-clicking CAS login button")
                                     injectAutoLoginClickScript(view)
                                 }
                                 
@@ -438,26 +439,51 @@ private fun injectAutoLoginClickScript(webView: WebView?) {
     val js = """
         (function() {
             function findAndClickButton() {
-                // Find button by text content or specific class
-                var buttons = Array.from(document.querySelectorAll('a, button, div.btn'));
-                var targetBtn = buttons.find(el => 
-                    el.innerText && (el.innerText.includes("统一身份认证") || el.innerText.includes("Unified Identity"))
-                );
+                // Strategy 1: Find by text content "统一身份认证"
+                var elements = Array.from(document.querySelectorAll('a, button, div.btn, span, input[type="button"]'));
+                var targetBtn = elements.find(function(el) {
+                    var text = (el.innerText || el.textContent || '').trim();
+                    return text.indexOf('统一身份认证') !== -1 || text.indexOf('Unified Identity') !== -1;
+                });
                 
                 if (targetBtn) {
-                    console.log("Found Unified Auth button, clicking...");
+                    console.log("Found Unified Auth button by text, clicking...");
                     targetBtn.click();
                     return true;
                 }
+                
+                // Strategy 2: Find link pointing to CAS / passport / id.ustc.edu.cn
+                var casLink = document.querySelector('a[href*="passport.ustc.edu.cn"]')
+                    || document.querySelector('a[href*="id.ustc.edu.cn"]')
+                    || document.querySelector('a[href*="cas/login"]')
+                    || document.querySelector('a[href*="ucas-sso"]');
+                if (casLink) {
+                    console.log("Found CAS link by href, clicking...");
+                    casLink.click();
+                    return true;
+                }
+                
+                // Strategy 3: Try window.location redirect as last resort
+                var allLinks = document.querySelectorAll('a[href]');
+                for (var i = 0; i < allLinks.length; i++) {
+                    var href = allLinks[i].getAttribute('href') || '';
+                    if (href.indexOf('passport') !== -1 || href.indexOf('id.ustc') !== -1 || href.indexOf('cas') !== -1) {
+                        console.log("Found CAS-related link, clicking: " + href);
+                        allLinks[i].click();
+                        return true;
+                    }
+                }
+                
                 return false;
             }
             
+            // Try immediately
             if (!findAndClickButton()) {
-                // Retry a few times if not found immediately
+                // Retry with increasing delay if not found immediately
                 var attempts = 0;
                 var interval = setInterval(function() {
                     attempts++;
-                    if (findAndClickButton() || attempts > 10) {
+                    if (findAndClickButton() || attempts > 20) {
                         clearInterval(interval);
                     }
                 }, 500);
