@@ -1,5 +1,6 @@
 package com.ustc.scoreminder.ui.settings
 
+import android.util.Log
 import android.webkit.CookieManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,8 @@ import androidx.lifecycle.Observer
 import java.util.UUID
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+
+
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -77,9 +80,12 @@ class SettingsViewModel @Inject constructor(
             try {
                 // 使用 get() 阻塞获取，因为我们在 IO 线程
                 val workInfos = workManager.getWorkInfosForUniqueWork(GradeSyncWorker.WORK_NAME).get()
-                if (workInfos != null && workInfos.isNotEmpty()) {
-                    val workInfo = workInfos[0]
-                    nextSyncTime = workInfo.nextScheduleTimeMillis
+                if (workInfos != null) {
+                    // 找到未结束的定期任务（ENQUEUED 或 RUNNING）
+                    val activeWorkInfo = workInfos.find { !it.state.isFinished }
+                    if (activeWorkInfo != null) {
+                        nextSyncTime = activeWorkInfo.nextScheduleTimeMillis
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -117,17 +123,22 @@ class SettingsViewModel @Inject constructor(
                     
                     // 如果手动同步成功，重置定期任务的计时器
                     if (workInfo.state == androidx.work.WorkInfo.State.SUCCEEDED) {
+                        Log.d("SettingsViewModel", "Manual sync succeeded, rescheduling periodic work")
                         val interval = credentialsManager.getSyncIntervalMinutes().toLong()
-                        val request = GradeSyncWorker.buildRequest(interval)
+                        // 设置 initialDelay 为 interval，避免立即执行，因为刚刚才手动同步过
+                        val request = GradeSyncWorker.buildRequest(interval, interval)
                         workManager.enqueueUniquePeriodicWork(
                             GradeSyncWorker.WORK_NAME,
-                            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                            androidx.work.ExistingPeriodicWorkPolicy.REPLACE,
                             request
                         )
                         // 重新加载以更新“下次同步时间”
                         // 稍微延迟一下以确保 WorkManager 更新了数据库
+                        // 尝试多次尝试以确保获取到最新状态
                         viewModelScope.launch(Dispatchers.IO) {
-                            kotlinx.coroutines.delay(500)
+                            kotlinx.coroutines.delay(1000)
+                            loadDebugInfo()
+                            kotlinx.coroutines.delay(2000)
                             loadDebugInfo()
                         }
                     }

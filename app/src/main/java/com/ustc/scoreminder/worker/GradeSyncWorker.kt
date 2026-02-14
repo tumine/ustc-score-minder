@@ -23,12 +23,12 @@ class GradeSyncWorker @AssistedInject constructor(
         private const val TAG = "GradeSyncWorker"
         const val WORK_NAME = "grade_sync_work"
         
-        fun buildRequest(intervalMinutes: Long): PeriodicWorkRequest {
+        fun buildRequest(intervalMinutes: Long, initialDelayMinutes: Long = 0): PeriodicWorkRequest {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
             
-            return PeriodicWorkRequestBuilder<GradeSyncWorker>(
+            val builder = PeriodicWorkRequestBuilder<GradeSyncWorker>(
                 intervalMinutes, TimeUnit.MINUTES
             )
                 .setConstraints(constraints)
@@ -36,7 +36,12 @@ class GradeSyncWorker @AssistedInject constructor(
                     BackoffPolicy.EXPONENTIAL,
                     10, TimeUnit.MINUTES
                 )
-                .build()
+
+            if (initialDelayMinutes > 0) {
+                builder.setInitialDelay(initialDelayMinutes, TimeUnit.MINUTES)
+            }
+            
+            return builder.build()
         }
     }
     
