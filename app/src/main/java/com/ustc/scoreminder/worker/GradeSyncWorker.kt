@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.ustc.scoreminder.data.local.CredentialsManager
 import com.ustc.scoreminder.domain.usecase.SyncGradesUseCase
+import com.ustc.scoreminder.domain.usecase.SyncGradesUseCase.AuthenticationException
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
@@ -77,10 +78,13 @@ class GradeSyncWorker @AssistedInject constructor(
                     Log.e(TAG, "Sync failed", e)
                     credentialsManager.setLastSyncTime(System.currentTimeMillis())
                     credentialsManager.setLastSyncResult("失败: ${e.message}")
-                    // 对于手动同步，我们可能希望它 Fail 而不是 Retry，以便用户知道出错了
-                    // 这里如果是 OneTimeRequest (runAttemptCount == 0)，我们可以 Fail
-                    // 但为了简单，我们如果是网络错误可能还是想 Retry
-                    // 暂时改为 Failure 以确保 UI 刷新显示错误信息
+                    
+                    // 检查是否为认证错误，若是则发送通知提醒用户重新登录
+                    if (e is AuthenticationException) {
+                        Log.w(TAG, "Authentication error detected, notifying user to re-login")
+                        notificationHelper.showReLoginNotification(e.message)
+                    }
+                    
                     ListenableWorker.Result.failure() 
                 }
             )

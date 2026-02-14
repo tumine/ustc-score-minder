@@ -12,6 +12,8 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -21,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ustc.scoreminder.domain.model.Grade
+import com.ustc.scoreminder.ui.login.WebViewLoginScreen
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -33,6 +36,37 @@ fun GradeListScreen(
     val allSemesters by viewModel.allSemesters.collectAsState()
     val selectedSemesters by viewModel.selectedSemesters.collectAsState()
     var showFilter by remember { mutableStateOf(false) }
+    
+    // 当需要重新登录时，先尝试 WebView 登录流程（使用保存的凭证自动填充）
+    if (uiState.showWebViewLogin) {
+        WebViewLoginScreen(
+            onLoginSuccess = { username, password ->
+                viewModel.onWebViewReLoginSuccess(username, password)
+            },
+            onLoginCancel = {
+                viewModel.onWebViewReLoginCancel()
+            },
+            onLoginError = {
+                // WebView 登录失败（密码错误），转为显示凭证输入对话框
+                viewModel.onWebViewReLoginError()
+            },
+            credentials = remember { viewModel.getSavedCredentials() }
+        )
+        return // WebView 登录界面覆盖整个屏幕
+    }
+    
+    // WebView 登录失败后，显示凭证输入对话框让用户重新输入
+    if (uiState.showCredentialDialog) {
+        ReLoginDialog(
+            errorMessage = uiState.errorMessage,
+            onConfirm = { username, password ->
+                viewModel.onCredentialsReEntered(username, password)
+            },
+            onDismiss = {
+                viewModel.dismissReLogin()
+            }
+        )
+    }
 
 
 
@@ -357,4 +391,103 @@ private fun EmptyState() {
             )
         }
     }
+}
+
+/**
+ * 重新登录对话框
+ * 当登录状态过期且密码错误时，弹出此对话框要求用户重新输入凭证
+ */
+@Composable
+private fun ReLoginDialog(
+    errorMessage: String?,
+    onConfirm: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    // 复用 LoginScreen 中的 CredentialInputDialog，但添加错误提示
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("登录状态已过期") },
+        text = {
+            Column {
+                // 显示错误原因
+                errorMessage?.let { msg ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+                
+                Text(
+                    text = "请重新输入统一身份认证账号密码",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("学号/工号") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("密码") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) 
+                        androidx.compose.ui.text.input.VisualTransformation.None 
+                    else 
+                        androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) 
+                                    Icons.Filled.Visibility
+                                else 
+                                    Icons.Filled.VisibilityOff,
+                                contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "您的账号密码将加密存储于本地，仅用于自动登录教务系统。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(username, password) },
+                enabled = username.isNotBlank() && password.isNotBlank()
+            ) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("稍后")
+            }
+        }
+    )
 }

@@ -1,5 +1,6 @@
 package com.ustc.scoreminder.ui.grades
 
+import android.util.Log
 import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,7 @@ import com.ustc.scoreminder.data.local.CredentialsManager
 import com.ustc.scoreminder.data.repository.GradeRepository
 import com.ustc.scoreminder.domain.model.Grade
 import com.ustc.scoreminder.domain.usecase.SyncGradesUseCase
+import com.ustc.scoreminder.domain.usecase.SyncGradesUseCase.AuthenticationException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -57,6 +59,9 @@ class GradeListViewModel @Inject constructor(
             }
         }
         
+        // 检查是否需要重新登录
+        checkNeedsReLogin()
+        
         // 启动时同步一次
         syncGrades()
     }
@@ -71,15 +76,27 @@ class GradeListViewModel @Inject constructor(
                         it.copy(
                             isRefreshing = false,
                             lastSyncTime = System.currentTimeMillis(),
-                            newGradesCount = result.newGrades.size
+                            newGradesCount = result.newGrades.size,
+                            needsReLogin = false,
+                            showWebViewLogin = false,
+                            showCredentialDialog = false
                         ) 
                     }
                 }
                 .onFailure { e ->
+                    val isAuthError = e is AuthenticationException
+                    if (isAuthError) {
+                        Log.w("GradeListViewModel", "Auth error during sync: ${e.message}")
+                    }
                     _uiState.update { 
                         it.copy(
                             isRefreshing = false,
-                            errorMessage = e.message ?: "同步失败"
+                            errorMessage = e.message ?: "同步失败",
+                            needsReLogin = isAuthError,
+                            // 认证错误时，先尝试 WebView 登录流程
+                            showWebViewLogin = isAuthError && credentialsManager.hasCredentials(),
+                            // 如果没有保存凭证，直接弹出凭证输入框
+                            showCredentialDialog = isAuthError && !credentialsManager.hasCredentials()
                         ) 
                     }
                 }
@@ -88,6 +105,107 @@ class GradeListViewModel @Inject constructor(
     
     fun clearNewGradesAlert() {
         _uiState.update { it.copy(newGradesCount = 0) }
+    }
+    
+    /**
+     * 检查是否需要重新登录（从 CredentialsManager 读取标志）
+     */
+    private fun checkNeedsReLogin() {
+        if (credentialsManager.getNeedsReLogin()) {
+            _uiState.update { 
+                it.copy(
+                    needsReLogin = true,
+                    // 有凭证时先走 WebView 登录流程
+                    showWebViewLogin = credentialsManager.hasCredentials(),
+                    showCredentialDialog = !credentialsManager.hasCredentials()
+                ) 
+            }
+        }
+    }
+    
+    /**
+     * 获取保存的凭证，用于 WebView 自动填充
+     */
+    fun getSavedCredentials(): Pair<String, String>? {
+        val u = credentialsManager.getUsername()
+        val p = credentialsManager.getPassword()
+        return if (u != null && p != null) u to p else null
+    }
+    
+    /**
+     * WebView 重新登录成功回调
+     */
+    fun onWebViewReLoginSuccess(username: String, password: String) {
+        Log.d("GradeListViewModel", "WebView re-login success")
+        // 更新凭证（以防用户在 WebView 中输入了新的凭证）
+        if (username.isNotBlank() && password.isNotBlank()) {
+            credentialsManager.saveCredentials(username, password)
+        }
+        credentialsManager.setNeedsReLogin(false)
+        _uiState.update { 
+            it.copy(
+                needsReLogin = false, 
+                showWebViewLogin = false, 
+                showCredentialDialog = false,
+                errorMessage = null
+            ) 
+        }
+        // 重新登录成功后重新同步
+        syncGrades()
+    }
+    
+    /**
+     * WebView 登录出错回调（密码错误等）
+     * 转为显示凭证输入对话框
+     */
+    fun onWebViewReLoginError() {
+        Log.w("GradeListViewModel", "WebView re-login error, showing credential dialog")
+        credentialsManager.setNeedsReLogin(true)
+        _uiState.update { 
+            it.copy(
+                showWebViewLogin = false, 
+                showCredentialDialog = true,
+                errorMessage = "用户名或密码错误，请确认后重新输入"
+            ) 
+        }
+    }
+    
+    /**
+     * WebView 登录取消
+     */
+    fun onWebViewReLoginCancel() {
+        _uiState.update { 
+            it.copy(showWebViewLogin = false, needsReLogin = false) 
+        }
+    }
+    
+    /**
+     * 用户输入新凭证后保存并通过 WebView 重新登录
+     */
+    fun onCredentialsReEntered(username: String, password: String) {
+        Log.d("GradeListViewModel", "Credentials re-entered, saving and starting WebView login")
+        credentialsManager.saveCredentials(username, password)
+        credentialsManager.setNeedsReLogin(false)
+        _uiState.update { 
+            it.copy(
+                showCredentialDialog = false, 
+                showWebViewLogin = true,
+                errorMessage = null
+            ) 
+        }
+    }
+    
+    /**
+     * 用户取消重新登录
+     */
+    fun dismissReLogin() {
+        _uiState.update { 
+            it.copy(
+                needsReLogin = false, 
+                showWebViewLogin = false, 
+                showCredentialDialog = false
+            ) 
+        }
     }
     
     /**
@@ -119,5 +237,8 @@ data class GradeListUiState(
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null,
     val lastSyncTime: Long? = null,
-    val newGradesCount: Int = 0
+    val newGradesCount: Int = 0,
+    val needsReLogin: Boolean = false,
+    val showWebViewLogin: Boolean = false,
+    val showCredentialDialog: Boolean = false
 )

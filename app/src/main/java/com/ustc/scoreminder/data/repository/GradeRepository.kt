@@ -36,7 +36,8 @@ class GradeRepository @Inject constructor(
         val success: Boolean,
         val newGrades: List<Grade> = emptyList(),
         val removedGrades: List<Grade> = emptyList(),
-        val errorMessage: String? = null
+        val errorMessage: String? = null,
+        val isAuthError: Boolean = false
     )
     
     /**
@@ -84,19 +85,30 @@ class GradeRepository @Inject constructor(
             val password = credentialsManager.getPassword()
             
             if (username == null || password == null) {
-                return SyncResult(false, errorMessage = "未保存登录凭证，请重新登录")
+                credentialsManager.setNeedsReLogin(true)
+                return SyncResult(false, errorMessage = "未保存登录凭证，请重新登录", isAuthError = true)
             }
+            
+            Log.d(TAG, "Session expired, attempting auto re-login with saved credentials...")
             
             // 使用凭证登录
             when (val loginResult = authenticator.login(username, password)) {
                 is JwAuthenticator.LoginResult.Error -> {
-                    return SyncResult(false, errorMessage = loginResult.message)
+                    val isAuthError = isAuthenticationError(loginResult.message)
+                    if (isAuthError) {
+                        Log.w(TAG, "Auto re-login failed: credentials invalid")
+                        credentialsManager.setNeedsReLogin(true)
+                    }
+                    return SyncResult(false, errorMessage = loginResult.message, isAuthError = isAuthError)
                 }
                 is JwAuthenticator.LoginResult.NeedLogin -> {
-                    return SyncResult(false, errorMessage = "需要重新登录")
+                    credentialsManager.setNeedsReLogin(true)
+                    return SyncResult(false, errorMessage = "需要重新登录", isAuthError = true)
                 }
                 is JwAuthenticator.LoginResult.Success -> {
-                    Log.d(TAG, "Login with credentials successful, fetching grades...")
+                    Log.d(TAG, "Auto re-login with saved credentials successful")
+                    // 重新登录成功，清除 needsReLogin 标志
+                    credentialsManager.setNeedsReLogin(false)
                 }
             }
         } else {
@@ -199,6 +211,25 @@ class GradeRepository @Inject constructor(
         courseType = courseType,
         examType = examType
     )
+    
+    /**
+     * 判断错误消息是否为认证错误（密码错误等）
+     * 区分认证错误和网络错误，以决定是否提示用户重新输入凭证
+     */
+    private fun isAuthenticationError(message: String): Boolean {
+        val authErrorKeywords = listOf(
+            "用户名或密码错误，请确认后重新输入",
+            "用户名或密码错误",
+            "认证失败",
+            "登录失败",
+            "密码错误",
+            "credential",
+            "authentication",
+            "unauthorized",
+            "登录验证失败"
+        )
+        return authErrorKeywords.any { message.contains(it, ignoreCase = true) }
+    }
     
     // 扩展函数：WebView GradeData -> Domain
     private fun WebViewGradeFetcher.GradeData.toGrade(): Grade = Grade(

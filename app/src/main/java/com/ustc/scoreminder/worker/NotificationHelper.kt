@@ -21,12 +21,12 @@ class NotificationHelper @Inject constructor(
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     
     init {
-        createNotificationChannel()
+        createNotificationChannels()
     }
     
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val gradeChannel = NotificationChannel(
                 CHANNEL_ID,
                 "成绩通知",
                 NotificationManager.IMPORTANCE_HIGH
@@ -34,7 +34,17 @@ class NotificationHelper @Inject constructor(
                 description = "新成绩发布通知"
                 enableVibration(true)
             }
-            notificationManager.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(gradeChannel)
+            
+            val authChannel = NotificationChannel(
+                AUTH_CHANNEL_ID,
+                "登录状态",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "登录过期或凭证失效通知"
+                enableVibration(true)
+            }
+            notificationManager.createNotificationChannel(authChannel)
         }
     }
     
@@ -78,8 +88,41 @@ class NotificationHelper @Inject constructor(
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
     
+    /**
+     * 显示需要重新登录的通知
+     * 当后台同步检测到凭证失效时调用
+     */
+    fun showReLoginNotification(errorMessage: String? = null) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("needs_re_login", true)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            1,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        
+        val content = errorMessage ?: "登录状态已过期，请重新输入用户名和密码"
+        
+        val notification = NotificationCompat.Builder(context, AUTH_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("需要重新登录")
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        
+        notificationManager.notify(AUTH_NOTIFICATION_ID, notification)
+    }
+    
     companion object {
         const val CHANNEL_ID = "grade_notification_channel"
+        const val AUTH_CHANNEL_ID = "auth_notification_channel"
         const val NOTIFICATION_ID = 1001
+        const val AUTH_NOTIFICATION_ID = 1002
     }
 }

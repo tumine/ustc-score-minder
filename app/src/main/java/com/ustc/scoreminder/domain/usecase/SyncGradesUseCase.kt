@@ -26,7 +26,12 @@ class SyncGradesUseCase @Inject constructor(
                 )
             )
         } else {
-            Result.failure(Exception(result.errorMessage ?: "同步失败"))
+            val exception = if (result.isAuthError) {
+                AuthenticationException(result.errorMessage ?: "认证失败，请重新登录")
+            } else {
+                Exception(result.errorMessage ?: "同步失败")
+            }
+            Result.failure(exception)
         }
     }
     
@@ -35,4 +40,10 @@ class SyncGradesUseCase @Inject constructor(
         val removedGrades: List<Grade>,
         val hasChanges: Boolean
     )
+    
+    /**
+     * 认证异常，用于区分认证错误和其他错误
+     * 当检测到此异常时，UI 层应提示用户重新输入凭证
+     */
+    class AuthenticationException(message: String) : Exception(message)
 }

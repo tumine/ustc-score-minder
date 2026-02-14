@@ -73,6 +73,7 @@ class CredentialsManager @Inject constructor(
         private const val DEFAULT_SYNC_INTERVAL = 30 // 默认30分钟
         private const val KEY_LAST_SYNC_TIME = "last_sync_time"
         private const val KEY_LAST_SYNC_RESULT = "last_sync_result"
+        private const val KEY_NEEDS_RE_LOGIN = "needs_re_login"
     }
 
     fun setLastSyncTime(time: Long) {
@@ -90,6 +91,14 @@ class CredentialsManager @Inject constructor(
     }
 
     fun getLastSyncResult(): String? = sharedPreferences.getString(KEY_LAST_SYNC_RESULT, null)
+
+    fun setNeedsReLogin(needsReLogin: Boolean) {
+        sharedPreferences.edit()
+            .putBoolean(KEY_NEEDS_RE_LOGIN, needsReLogin)
+            .apply()
+    }
+
+    fun getNeedsReLogin(): Boolean = sharedPreferences.getBoolean(KEY_NEEDS_RE_LOGIN, false)
 
     fun registerOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) {
         sharedPreferences.registerOnSharedPreferenceChangeListener(listener)

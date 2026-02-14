@@ -263,6 +263,7 @@ private fun injectCredentialCaptureScript(webView: WebView?) {
                 var errorToast = document.querySelector('.error-toast .error-msg');
                 var bodyText = document.body ? document.body.innerText : '';
                 if ((errorToast && errorToast.innerText) || 
+                    bodyText.includes("用户名或密码错误，请确认后重新输入") ||
                     bodyText.includes("用户名或密码错误") ||
                     bodyText.includes("认证失败")) {
                     console.log("Login error detected");
