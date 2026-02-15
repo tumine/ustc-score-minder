@@ -5,13 +5,14 @@
 ## ✨ 功能特性
 
 - **🔐 安全登录** — 通过内嵌 WebView 完成 USTC CAS 统一身份认证登录，兼容复杂的 SPA 登录页面
+- **🤖 智能重登** — 支持后台静默重登，当会话过期时自动使用加密凭证尝试重新登录，无需用户干预
 - **🔒 加密存储** — 使用 Android `EncryptedSharedPreferences` (AES-256) 本地加密存储用户凭证
-- **📊 成绩查看** — 按学期分组展示所有课程成绩，包括课程名称、学分、绩点、成绩等详细信息
+- **📊 成绩查看** — 按学期分组展示所有课程成绩，包含**学分**、**绩点**、**成绩**等详细信息
 - **🔍 学期筛选** — 支持按学期筛选成绩，快速查看指定学期的课程信息
-- **🔄 后台同步** — 基于 WorkManager 的定时后台任务，自动检查新成绩（默认间隔 30 分钟，可自定义）
+- **🔄 后台同步** — 基于 WorkManager 的定时后台任务，自动检查新成绩（默认间隔 30 分钟）
 - **🔔 新成绩通知** — 检测到新成绩时，发送系统通知提醒用户
 - **⬇️ 下拉刷新** — 支持下拉手势手动刷新成绩列表
-- **⚙️ 设置管理** — 可自定义同步间隔（15 分钟 / 30 分钟 / 1 小时 / 2 小时 / 4 小时）、开关通知等
+- **⚙️ 设置管理** — 可自定义同步间隔（支持 15 分钟至 4 小时多种间隔，调试模式下支持更短间隔）、开关通知等
 
 ## 🏗️ 技术架构
 
@@ -44,15 +45,18 @@ app/src/main/java/com/ustc/scoreminder/
 │   │   └── entity/
 │   │       └── GradeEntity.kt       # 成绩数据库实体
 │   ├── remote/
+│   │   ├── BackgroundWebViewAuthenticator.kt # 后台 WebView 认证
 │   │   ├── CryptoUtils.kt           # 加密工具
 │   │   ├── GradeParser.kt           # 成绩页面 HTML 解析器
-│   │   ├── JwAuthenticator.kt       # 教务系统认证
+│   │   ├── JwAuthenticator.kt       # 教务系统认证（旧版）
+│   │   ├── LoginScriptUtils.kt      # 登录脚本工具
 │   │   ├── NetworkModule.kt         # 网络模块 (Hilt)
 │   │   └── WebViewGradeFetcher.kt   # WebView 成绩抓取
 │   └── repository/
 │       └── GradeRepository.kt       # 成绩数据仓库
 ├── di/
-│   └── DatabaseModule.kt            # 数据库依赖注入模块
+│   ├── DatabaseModule.kt            # 数据库依赖注入模块
+│   └── WorkManagerModule.kt         # WorkManager 依赖注入
 ├── domain/
 │   ├── model/
 │   │   └── Grade.kt                 # 成绩领域模型
