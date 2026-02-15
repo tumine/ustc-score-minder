@@ -75,14 +75,14 @@ fun GradeListScreen(
             TopAppBar(
                 title = { Text("我的成绩") },
                 actions = {
-                    // 设置按钮
+                    // 刷新按钮
                     TooltipBox(
                         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                        tooltip = { PlainTooltip { Text("设置") } },
+                        tooltip = { PlainTooltip { Text("刷新成绩") } },
                         state = rememberTooltipState()
                     ) {
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "设置")
+                        IconButton(onClick = viewModel::syncGrades) {
+                            Icon(Icons.Default.Refresh, contentDescription = "刷新成绩")
                         }
                     }
                     // 筛选按钮
@@ -103,13 +103,14 @@ fun GradeListScreen(
                             }
                         }
                     }
+                    // 设置按钮
                     TooltipBox(
                         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                        tooltip = { PlainTooltip { Text("刷新成绩") } },
+                        tooltip = { PlainTooltip { Text("设置") } },
                         state = rememberTooltipState()
                     ) {
-                        IconButton(onClick = viewModel::syncGrades) {
-                            Icon(Icons.Default.Refresh, contentDescription = "刷新成绩")
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "设置")
                         }
                     }
 
