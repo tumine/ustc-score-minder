@@ -42,6 +42,26 @@ class SettingsViewModel @Inject constructor(
     private var workInfoObserver: Observer<androidx.work.WorkInfo>? = null
     private var workInfoLiveData: LiveData<androidx.work.WorkInfo>? = null
 
+    // 监听定期同步任务的状态变化
+    private val periodicWorkObserver = Observer<List<androidx.work.WorkInfo>> { workInfos ->
+        if (workInfos.isNullOrEmpty()) return@Observer
+        
+        // 找到未结束的定期任务（ENQUEUED 或 RUNNING）
+        val activeWorkInfo = workInfos.find { !it.state.isFinished }
+        
+        if (activeWorkInfo != null) {
+            // 当任务处于 ENQUEUED 状态时，nextScheduleTimeMillis 才是准确的下次执行时间
+            // 当任务 RUNNING 时，nextScheduleTimeMillis 可能是 Long.MAX_VALUE
+            if (activeWorkInfo.state == androidx.work.WorkInfo.State.ENQUEUED) {
+                val nextTime = activeWorkInfo.nextScheduleTimeMillis
+                if (nextTime != Long.MAX_VALUE && nextTime > System.currentTimeMillis()) {
+                    uiState = uiState.copy(nextSyncTime = nextTime)
+                }
+            }
+            // 如果是 RUNNING 状态，保持现有的 nextSyncTime 不变，避免显示异常或 0
+        }
+    }
+
     // 监听 SharedPreferences 变化以实时更新调试信息
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "sync_interval_minutes") {
@@ -57,12 +77,24 @@ class SettingsViewModel @Inject constructor(
         loadSettings()
         loadDebugInfo()
         credentialsManager.registerOnSharedPreferenceChangeListener(prefsListener)
+        
+        // 开始观察定期任务状态
+        workManager.getWorkInfosForUniqueWorkLiveData(GradeSyncWorker.WORK_NAME)
+            .observeForever(periodicWorkObserver)
     }
     
     override fun onCleared() {
         super.onCleared()
         credentialsManager.unregisterOnSharedPreferenceChangeListener(prefsListener)
         workInfoLiveData?.removeObserver(workInfoObserver!!)
+        
+        // 停止观察定期任务
+        try {
+            workManager.getWorkInfosForUniqueWorkLiveData(GradeSyncWorker.WORK_NAME)
+                .removeObserver(periodicWorkObserver)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
     
     private fun loadSettings() {
@@ -78,28 +110,12 @@ class SettingsViewModel @Inject constructor(
             val lastSyncTime = credentialsManager.getLastSyncTime()
             val lastSyncResult = credentialsManager.getLastSyncResult()
             
-            // 获取下次同步时间
-            var nextSyncTime = 0L
-            try {
-                // 使用 get() 阻塞获取，因为我们在 IO 线程
-                val workInfos = workManager.getWorkInfosForUniqueWork(GradeSyncWorker.WORK_NAME).get()
-                if (workInfos != null) {
-                    // 找到未结束的定期任务（ENQUEUED 或 RUNNING）
-                    val activeWorkInfo = workInfos.find { !it.state.isFinished }
-                    if (activeWorkInfo != null) {
-                        nextSyncTime = activeWorkInfo.nextScheduleTimeMillis
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            
             // 切换回主线程更新 UI
             viewModelScope.launch(Dispatchers.Main) {
                 uiState = uiState.copy(
                     lastSyncTime = lastSyncTime,
-                    lastSyncResult = lastSyncResult,
-                    nextSyncTime = nextSyncTime
+                    lastSyncResult = lastSyncResult
+                    // nextSyncTime 由 periodicWorkObserver 维护，此处不再更新
                 )
             }
         }
