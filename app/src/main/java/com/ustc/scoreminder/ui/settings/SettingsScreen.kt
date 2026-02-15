@@ -330,29 +330,35 @@ private fun IntervalSelectionDialog(
         240 * 60 * 1000L  // 4小时
     )
     
-    // 如果当前选中的是短间隔，则默认展开
-    var expanded by remember { mutableStateOf(shortIntervals.contains(currentIntervalMs)) }
+    // 是否显示高级选项页面
+    var isAdvancedPage by remember { mutableStateOf(false) }
     
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("选择同步间隔") },
+        onDismissRequest = {
+            if (isAdvancedPage && !shortIntervals.contains(currentIntervalMs)) {
+                isAdvancedPage = false
+            } else {
+                onDismiss()
+            }
+        },
+        title = { 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isAdvancedPage) {
+                    IconButton(onClick = { isAdvancedPage = false }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Text("调试选项")
+                } else {
+                    Text("选择同步间隔")
+                }
+            }
+        },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
-                // 标准间隔选项 (缺省展示)
-                standardIntervals.forEach { interval ->
-                    IntervalOption(
-                        interval = interval,
-                        isSelected = interval == currentIntervalMs,
-                        onSelect = onSelect
-                    )
-                }
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                // 短间隔选项 (放入更多选项中)
-                if (expanded) {
+                if (isAdvancedPage) {
+                    // 短间隔选项
                     shortIntervals.forEach { interval ->
                         IntervalOption(
                             interval = interval,
@@ -360,21 +366,35 @@ private fun IntervalSelectionDialog(
                             onSelect = onSelect
                         )
                     }
-                    
-                    // 收起按钮
-                    TextButton(
-                        onClick = { expanded = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("收起")
-                    }
                 } else {
-                    // 更多选项按钮
-                    TextButton(
-                        onClick = { expanded = true },
-                        modifier = Modifier.fillMaxWidth()
+                    // 标准间隔选项
+                    standardIntervals.forEach { interval ->
+                        IntervalOption(
+                            interval = interval,
+                            isSelected = interval == currentIntervalMs,
+                            onSelect = onSelect
+                        )
+                    }
+                    
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    // 更多选项按钮 - 跳转到新页面
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isAdvancedPage = true }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("更多选项 (调试用短间隔)")
+                        Text(
+                            text = "更多选项 (调试用短间隔)",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null
+                        )
                     }
                 }
             }
