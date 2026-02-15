@@ -51,14 +51,17 @@ class SettingsViewModel @Inject constructor(
         
         if (activeWorkInfo != null) {
             // 当任务处于 ENQUEUED 状态时，nextScheduleTimeMillis 才是准确的下次执行时间
-            // 当任务 RUNNING 时，nextScheduleTimeMillis 可能是 Long.MAX_VALUE
             if (activeWorkInfo.state == androidx.work.WorkInfo.State.ENQUEUED) {
                 val nextTime = activeWorkInfo.nextScheduleTimeMillis
                 if (nextTime != Long.MAX_VALUE && nextTime > System.currentTimeMillis()) {
                     uiState = uiState.copy(nextSyncTime = nextTime)
                 }
+            } else if (activeWorkInfo.state == androidx.work.WorkInfo.State.RUNNING) {
+                // 如果是 RUNNING 状态，说明任务正在执行，下次执行时间约为 当前时间 + 间隔时间
+                // 注意：这里只是为了 UI 即时反馈，真实的下一次执行时间由 WorkManager 决定
+                val estimatedNextTime = System.currentTimeMillis() + uiState.syncIntervalMs
+                uiState = uiState.copy(nextSyncTime = estimatedNextTime)
             }
-            // 如果是 RUNNING 状态，保持现有的 nextSyncTime 不变，避免显示异常或 0
         }
     }
 
@@ -202,7 +205,7 @@ class SettingsViewModel @Inject constructor(
             val workRequest = GradeSyncWorker.buildRequest(intervalMinutes)
             workManager.enqueueUniquePeriodicWork(
                 GradeSyncWorker.WORK_NAME,
-                androidx.work.ExistingPeriodicWorkPolicy.UPDATE, // 使用 UPDATE 尝试保留原有计划，或者 REPLACE 也可以
+                androidx.work.ExistingPeriodicWorkPolicy.REPLACE, // 使用 REPLACE 确保以前可能存在的 OneTimeWork 被正确替换为 PeriodicWork
                 workRequest
             )
              // 对于 PeriodicWork，由于最小间隔限制，UPDATE可能不会立即生效如预期那样灵敏，但对于标准用途足够

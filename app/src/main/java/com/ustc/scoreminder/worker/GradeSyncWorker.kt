@@ -92,7 +92,7 @@ class GradeSyncWorker @AssistedInject constructor(
                     credentialsManager.setLastSyncTime(System.currentTimeMillis())
                     credentialsManager.setLastSyncResult("成功: 发现 ${result.newGrades.size} 个新成绩")
                     
-            ListenableWorker.Result.success()
+                    ListenableWorker.Result.success()
                 },
                 onFailure = { e ->
                     Log.e(TAG, "Sync failed", e)
@@ -108,6 +108,9 @@ class GradeSyncWorker @AssistedInject constructor(
                     ListenableWorker.Result.failure() 
                 }
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            Log.d(TAG, "Work cancelled", e)
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Work failed with exception", e)
             credentialsManager.setLastSyncTime(System.currentTimeMillis())
@@ -118,7 +121,8 @@ class GradeSyncWorker @AssistedInject constructor(
             val scheduleNext = inputData.getBoolean(KEY_SCHEDULE_NEXT, false)
             val intervalMs = inputData.getLong(KEY_INTERVAL_MS, 0)
             
-            if (scheduleNext && intervalMs > 0) {
+            // Only schedule if we are NOT stopped (cancelled) and explicit recursion is requested
+            if (!isStopped && scheduleNext && intervalMs > 0) {
                 Log.d(TAG, "Scheduling next recursive work in ${intervalMs}ms")
                 val nextRequest = buildOneTimeRequest(intervalMs, true)
                 WorkManager.getInstance(applicationContext).enqueueUniqueWork(
