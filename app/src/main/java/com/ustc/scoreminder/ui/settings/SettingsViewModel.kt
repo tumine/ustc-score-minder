@@ -64,7 +64,7 @@ class SettingsViewModel @Inject constructor(
 
     // 监听 SharedPreferences 变化以实时更新调试信息
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "sync_interval_minutes") {
+        if (key == "sync_interval_ms" || key == "sync_interval_minutes") {
             loadSettings()
             // Don't loadDebugInfo here, wait for manual update in updateSyncInterval
         } else if (key == "last_sync_time" || key == "last_sync_result") {
@@ -99,7 +99,7 @@ class SettingsViewModel @Inject constructor(
     
     private fun loadSettings() {
         uiState = uiState.copy(
-            syncIntervalMinutes = credentialsManager.getSyncIntervalMinutes(),
+            syncIntervalMs = credentialsManager.getSyncIntervalMs(),
             notificationEnabled = credentialsManager.isNotificationEnabled(),
             isLoggedIn = credentialsManager.hasCredentials()
         )
@@ -140,20 +140,31 @@ class SettingsViewModel @Inject constructor(
                 if (workInfo.state.isFinished) {
                     loadDebugInfo() // 任务完成，刷新一下
                     
-                    // 如果手动同步成功，重置定期任务的计时器
+                    // 如果手动同步成功，重置定时任务
                     if (workInfo.state == androidx.work.WorkInfo.State.SUCCEEDED) {
-                        Log.d("SettingsViewModel", "Manual sync succeeded, rescheduling periodic work")
-                        val interval = credentialsManager.getSyncIntervalMinutes().toLong()
-                        // 设置 initialDelay 为 interval，避免立即执行，因为刚刚才手动同步过
-                        val request = GradeSyncWorker.buildRequest(interval, interval)
-                        workManager.enqueueUniquePeriodicWork(
-                            GradeSyncWorker.WORK_NAME,
-                            androidx.work.ExistingPeriodicWorkPolicy.REPLACE,
-                            request
-                        )
+                        Log.d("SettingsViewModel", "Manual sync succeeded, rescheduling work")
+                        val intervalMs = credentialsManager.getSyncIntervalMs()
+                        
+                        if (intervalMs < 15 * 60 * 1000L) {
+                            // 短间隔：重置递归任务
+                            val request = GradeSyncWorker.buildOneTimeRequest(intervalMs, true)
+                            workManager.enqueueUniqueWork(
+                                GradeSyncWorker.WORK_NAME,
+                                ExistingWorkPolicy.REPLACE,
+                                request
+                            )
+                        } else {
+                            // 长间隔：重置定期任务
+                            val intervalMinutes = intervalMs / (60 * 1000)
+                            val request = GradeSyncWorker.buildRequest(intervalMinutes, intervalMinutes)
+                            workManager.enqueueUniquePeriodicWork(
+                                GradeSyncWorker.WORK_NAME,
+                                androidx.work.ExistingPeriodicWorkPolicy.REPLACE,
+                                request
+                            )
+                        }
+                        
                         // 重新加载以更新“下次同步时间”
-                        // 稍微延迟一下以确保 WorkManager 更新了数据库
-                        // 尝试多次尝试以确保获取到最新状态
                         viewModelScope.launch(Dispatchers.IO) {
                             kotlinx.coroutines.delay(1000)
                             loadDebugInfo()
@@ -169,28 +180,38 @@ class SettingsViewModel @Inject constructor(
         workManager.enqueue(workRequest)
     }
     
-    fun updateSyncInterval(minutes: Int) {
-        credentialsManager.setSyncIntervalMinutes(minutes)
-        uiState = uiState.copy(syncIntervalMinutes = minutes)
+    fun updateSyncInterval(intervalMs: Long) {
+        credentialsManager.setSyncIntervalMs(intervalMs)
+        uiState = uiState.copy(syncIntervalMs = intervalMs)
         
-        val workRequest = GradeSyncWorker.buildRequest(minutes.toLong())
-        val operation = workManager.enqueueUniquePeriodicWork(
-            GradeSyncWorker.WORK_NAME,
-            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-            workRequest
-        )
+        if (intervalMs < 15 * 60 * 1000L) {
+            // 短间隔：使用递归 OneTimeWork
+            // 取消之前的（可能是定期任务）并立即启动新的计时（initialDelay）
+            val request = GradeSyncWorker.buildOneTimeRequest(intervalMs, true)
+            workManager.enqueueUniqueWork(
+                GradeSyncWorker.WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+            // 更新 UI 状态
+            loadDebugInfo()
+        } else {
+            // 长间隔：使用 PeriodicWork
+            // 如果之前是递归任务，enqueueUniquePeriodicWork(REPLACE) 会覆盖它
+            val intervalMinutes = intervalMs / (60 * 1000)
+            val workRequest = GradeSyncWorker.buildRequest(intervalMinutes)
+            workManager.enqueueUniquePeriodicWork(
+                GradeSyncWorker.WORK_NAME,
+                androidx.work.ExistingPeriodicWorkPolicy.UPDATE, // 使用 UPDATE 尝试保留原有计划，或者 REPLACE 也可以
+                workRequest
+            )
+             // 对于 PeriodicWork，由于最小间隔限制，UPDATE可能不会立即生效如预期那样灵敏，但对于标准用途足够
+        }
         
-        // 等待 WorkManager 完成重新调度后再更新 UI
+        // 稍微延迟一下更新 UI
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // 等待操作完成
-                operation.result.get()
-                // 稍微延迟一下以确保数据库状态已更新
-                kotlinx.coroutines.delay(500)
-                loadDebugInfo()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            kotlinx.coroutines.delay(500)
+            loadDebugInfo()
         }
     }
     
@@ -213,11 +234,15 @@ class SettingsViewModel @Inject constructor(
 }
 
 data class SettingsUiState(
-    val syncIntervalMinutes: Int = 30,
+    val syncIntervalMs: Long = 30 * 60 * 1000L,
     val notificationEnabled: Boolean = true,
     val isLoggedIn: Boolean = true,
     val lastSyncTime: Long = 0,
     val lastSyncResult: String? = null,
     val nextSyncTime: Long = 0,
     val isSyncing: Boolean = false
-)
+) {
+    // 兼容旧 UI 代码的辅助属性
+    val syncIntervalMinutes: Int
+        get() = (syncIntervalMs / 60000).toInt()
+}

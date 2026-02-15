@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,9 +56,15 @@ fun SettingsScreen(
             // 同步设置
             SettingsSection(title = "同步设置") {
                 // 同步间隔
+                val intervalText = when {
+                    uiState.syncIntervalMs < 60 * 1000L -> "${uiState.syncIntervalMs / 1000} 秒"
+                    uiState.syncIntervalMs < 60 * 60 * 1000L -> "${uiState.syncIntervalMs / (60 * 1000)} 分钟"
+                    else -> "${uiState.syncIntervalMs / (60 * 60 * 1000)} 小时"
+                }
+                
                 SettingsItem(
                     title = "同步间隔",
-                    subtitle = "${uiState.syncIntervalMinutes} 分钟",
+                    subtitle = intervalText,
                     onClick = { showIntervalDialog = true }
                 )
                 
@@ -153,7 +161,7 @@ fun SettingsScreen(
     // 同步间隔选择对话框
     if (showIntervalDialog) {
         IntervalSelectionDialog(
-            currentInterval = uiState.syncIntervalMinutes,
+            currentIntervalMs = uiState.syncIntervalMs,
             onSelect = { 
                 viewModel.updateSyncInterval(it)
                 showIntervalDialog = false
@@ -303,40 +311,70 @@ private fun SettingsToggleItem(
 
 @Composable
 private fun IntervalSelectionDialog(
-    currentInterval: Int,
-    onSelect: (Int) -> Unit,
+    currentIntervalMs: Long,
+    onSelect: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val intervals = listOf(15, 30, 60, 120, 240)
+    val shortIntervals = listOf(
+        30 * 1000L,       // 30秒
+        60 * 1000L,       // 1分钟
+        5 * 60 * 1000L,   // 5分钟
+        10 * 60 * 1000L   // 10分钟
+    )
+    
+    val standardIntervals = listOf(
+        15 * 60 * 1000L,  // 15分钟
+        30 * 60 * 1000L,  // 30分钟
+        60 * 60 * 1000L,  // 1小时
+        120 * 60 * 1000L, // 2小时
+        240 * 60 * 1000L  // 4小时
+    )
+    
+    // 如果当前选中的是短间隔，则默认展开
+    var expanded by remember { mutableStateOf(shortIntervals.contains(currentIntervalMs)) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择同步间隔") },
         text = {
-            Column {
-                intervals.forEach { interval ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(interval) }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                // 标准间隔选项 (缺省展示)
+                standardIntervals.forEach { interval ->
+                    IntervalOption(
+                        interval = interval,
+                        isSelected = interval == currentIntervalMs,
+                        onSelect = onSelect
+                    )
+                }
+                
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                // 短间隔选项 (放入更多选项中)
+                if (expanded) {
+                    shortIntervals.forEach { interval ->
+                        IntervalOption(
+                            interval = interval,
+                            isSelected = interval == currentIntervalMs,
+                            onSelect = onSelect
+                        )
+                    }
+                    
+                    // 收起按钮
+                    TextButton(
+                        onClick = { expanded = false },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        RadioButton(
-                            selected = interval == currentInterval,
-                            onClick = { onSelect(interval) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = when (interval) {
-                                15 -> "15 分钟"
-                                30 -> "30 分钟"
-                                60 -> "1 小时"
-                                120 -> "2 小时"
-                                240 -> "4 小时"
-                                else -> "$interval 分钟"
-                            }
-                        )
+                        Text("收起")
+                    }
+                } else {
+                    // 更多选项按钮
+                    TextButton(
+                        onClick = { expanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("更多选项 (调试用短间隔)")
                     }
                 }
             }
@@ -347,4 +385,32 @@ private fun IntervalSelectionDialog(
             }
         }
     )
+}
+
+@Composable
+private fun IntervalOption(
+    interval: Long,
+    isSelected: Boolean,
+    onSelect: (Long) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect(interval) }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isSelected,
+            onClick = { onSelect(interval) }
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = when {
+                interval < 60 * 1000L -> "${interval / 1000} 秒"
+                interval < 60 * 60 * 1000L -> "${interval / (60 * 1000)} 分钟"
+                else -> "${interval / (60 * 60 * 1000)} 小时"
+            }
+        )
+    }
 }

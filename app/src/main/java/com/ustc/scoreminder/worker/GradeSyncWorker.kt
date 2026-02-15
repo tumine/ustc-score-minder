@@ -44,6 +44,26 @@ class GradeSyncWorker @AssistedInject constructor(
             
             return builder.build()
         }
+
+        const val KEY_SCHEDULE_NEXT = "schedule_next"
+        const val KEY_INTERVAL_MS = "interval_ms"
+
+        fun buildOneTimeRequest(delayMs: Long, recursive: Boolean): OneTimeWorkRequest {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+            val data = workDataOf(
+                KEY_SCHEDULE_NEXT to recursive,
+                KEY_INTERVAL_MS to delayMs
+            )
+
+            return OneTimeWorkRequest.Builder(GradeSyncWorker::class.java)
+                .setConstraints(constraints)
+                .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                .setInputData(data)
+                .build()
+        }
     }
     
     override suspend fun doWork(): ListenableWorker.Result {
@@ -72,7 +92,7 @@ class GradeSyncWorker @AssistedInject constructor(
                     credentialsManager.setLastSyncTime(System.currentTimeMillis())
                     credentialsManager.setLastSyncResult("成功: 发现 ${result.newGrades.size} 个新成绩")
                     
-                    ListenableWorker.Result.success()
+            ListenableWorker.Result.success()
                 },
                 onFailure = { e ->
                     Log.e(TAG, "Sync failed", e)
@@ -93,6 +113,20 @@ class GradeSyncWorker @AssistedInject constructor(
             credentialsManager.setLastSyncTime(System.currentTimeMillis())
             credentialsManager.setLastSyncResult("异常: ${e.message}")
             ListenableWorker.Result.failure()
+        } finally {
+            // Check if we need to schedule the next one (recursive mode for short intervals)
+            val scheduleNext = inputData.getBoolean(KEY_SCHEDULE_NEXT, false)
+            val intervalMs = inputData.getLong(KEY_INTERVAL_MS, 0)
+            
+            if (scheduleNext && intervalMs > 0) {
+                Log.d(TAG, "Scheduling next recursive work in ${intervalMs}ms")
+                val nextRequest = buildOneTimeRequest(intervalMs, true)
+                WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                    WORK_NAME,
+                    ExistingWorkPolicy.REPLACE, // Must be REPLACE to keep the chain unique but active
+                    nextRequest
+                )
+            }
         }
     }
 }

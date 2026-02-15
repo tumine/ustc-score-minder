@@ -46,13 +46,35 @@ class CredentialsManager @Inject constructor(
             .apply()
     }
     
-    fun getSyncIntervalMinutes(): Int = 
-        sharedPreferences.getInt(KEY_SYNC_INTERVAL, DEFAULT_SYNC_INTERVAL)
+    fun getSyncIntervalMs(): Long {
+        // 先检查是否有毫秒设置
+        if (sharedPreferences.contains(KEY_SYNC_INTERVAL_MS)) {
+            return sharedPreferences.getLong(KEY_SYNC_INTERVAL_MS, DEFAULT_SYNC_INTERVAL_MS)
+        }
+        
+        // 迁移旧的分钟设置
+        val minutes = sharedPreferences.getInt(KEY_SYNC_INTERVAL_MINUTES, DEFAULT_SYNC_INTERVAL_MINUTES)
+        val ms = minutes * 60 * 1000L
+        
+        // 保存新格式并移除旧格式（可选，为了兼容性也可以保留）
+        setSyncIntervalMs(ms)
+        
+        return ms
+    }
+
+    fun setSyncIntervalMs(ms: Long) {
+        sharedPreferences.edit()
+            .putLong(KEY_SYNC_INTERVAL_MS, ms)
+            // 同时更新旧的分钟key以保持兼容性（尽管可能不再准确，取近似值）
+            .putInt(KEY_SYNC_INTERVAL_MINUTES, (ms / 60000).toInt())
+            .apply()
+    }
+
+    // 保持兼容性，但内部使用 MS
+    fun getSyncIntervalMinutes(): Int = (getSyncIntervalMs() / 60000).toInt()
     
     fun setSyncIntervalMinutes(minutes: Int) {
-        sharedPreferences.edit()
-            .putInt(KEY_SYNC_INTERVAL, minutes)
-            .apply()
+        setSyncIntervalMs(minutes * 60 * 1000L)
     }
     
     fun isNotificationEnabled(): Boolean = 
@@ -68,9 +90,11 @@ class CredentialsManager @Inject constructor(
         private const val PREFS_NAME = "ustc_score_minder_encrypted_prefs"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
-        private const val KEY_SYNC_INTERVAL = "sync_interval_minutes"
+        private const val KEY_SYNC_INTERVAL_MINUTES = "sync_interval_minutes"
         private const val KEY_NOTIFICATION_ENABLED = "notification_enabled"
-        private const val DEFAULT_SYNC_INTERVAL = 30 // 默认30分钟
+        private const val KEY_SYNC_INTERVAL_MS = "sync_interval_ms"
+        private const val DEFAULT_SYNC_INTERVAL_MINUTES = 30
+        private const val DEFAULT_SYNC_INTERVAL_MS = DEFAULT_SYNC_INTERVAL_MINUTES * 60 * 1000L
         private const val KEY_LAST_SYNC_TIME = "last_sync_time"
         private const val KEY_LAST_SYNC_RESULT = "last_sync_result"
         private const val KEY_NEEDS_RE_LOGIN = "needs_re_login"
