@@ -81,82 +81,36 @@ class GradeRepository @Inject constructor(
         Log.d(TAG, "WebView fetch returned empty, trying direct HTTP...")
         // 注意：authenticator.checkLoginStatus() 是基于 HTTP 请求的，
         // 如果 cookies 已经失效，这里会返回 false
-        val isAlreadyLoggedIn = authenticator.checkLoginStatus()
+        var isAlreadyLoggedIn = authenticator.checkLoginStatus()
         
         if (!isAlreadyLoggedIn) {
             // 如果没有有效的 cookies，尝试使用保存的凭证登录
-            val username = credentialsManager.getUsername()
-            val password = credentialsManager.getPassword()
-            
-            if (username == null || password == null) {
+            val loginResult = performAutoLogin()
+            if (!loginResult.success) {
                 credentialsManager.setNeedsReLogin(true)
-                return SyncResult(false, errorMessage = "未保存登录凭证，请重新登录", isAuthError = true)
+                return SyncResult(false, errorMessage = loginResult.errorMessage, isAuthError = loginResult.isAuthError)
             }
-            
-            Log.d(TAG, "Session expired, attempting auto re-login with saved credentials...")
-            
-            // 尝试 HTTP 登录 (JwAuthenticator)
-            // 如果 JwAuthenticator 无法处理新版 CAS，我们将回退到 BackgroundWebViewAuthenticator
-            var loginSuccess = false
-            var loginErrorMsg = ""
-            var isAuthError = false
-            
-            when (val result = authenticator.login(username, password)) {
-                is JwAuthenticator.LoginResult.Success -> {
-                    Log.d(TAG, "HTTP auto re-login successful")
-                    loginSuccess = true
-                    credentialsManager.setNeedsReLogin(false)
-                }
-                is JwAuthenticator.LoginResult.Error -> {
-                    Log.w(TAG, "HTTP login failed: ${result.message}")
-                    loginErrorMsg = result.message
-                    if (isAuthenticationError(result.message)) {
-                        isAuthError = true
-                    }
-                }
-                is JwAuthenticator.LoginResult.NeedLogin -> {
-                    Log.w(TAG, "HTTP login failed: NeedLogin")
-                    isAuthError = true
-                    loginErrorMsg = "需要重新登录"
-                }
-            }
-            
-            // 如果 HTTP 登录失败，尝试 BackgroundWebViewAuthenticator
-            if (!loginSuccess) {
-                Log.d(TAG, "HTTP login failed, attempting Background WebView login...")
-                
-                val bgResult = backgroundWebViewAuthenticator.performLogin(username, password)
-                
-                if (bgResult.isSuccess) {
-                    Log.d(TAG, "Background WebView login successful")
-                    loginSuccess = true
-                    credentialsManager.setNeedsReLogin(false)
-                    // 登录成功后，Cookies 已经同步到 CookieManager 和 OkHttpClient
-                } else {
-                    val error = bgResult.exceptionOrNull()
-                    Log.e(TAG, "Background WebView login failed", error)
-                    
-                    // 如果之前的 HTTP 登录已经是认证错误，则保持该错误
-                    // 否则使用 WebView 登录的错误
-                    if (!isAuthError) {
-                         val msg = error?.message ?: "后台登录失败"
-                         loginErrorMsg = msg
-                         isAuthError = true // 既然两次尝试都失败了，大概率是凭证问题或系统变更，提示用户重新登录比较稳妥
-                    }
-                }
-            }
-            
-            if (!loginSuccess) {
-                credentialsManager.setNeedsReLogin(true)
-                return SyncResult(false, errorMessage = loginErrorMsg, isAuthError = isAuthError)
-            }
+            isAlreadyLoggedIn = true
         } else {
             Log.d(TAG, "Already logged in via cookies, fetching grades...")
         }
         
         // Step 3: 获取成绩页面
         // 此时应该已经登录成功（无论是之前的 Session 还是刚才的重新登录）
-        val html = authenticator.fetchGradePage()
+        var html = authenticator.fetchGradePage()
+        
+        // 检查 HTML 是否为登录页面（False Positive: checkLoginStatus 说已登录，但实际 Session 已过期）
+        if (html != null && (html.contains("id.ustc.edu.cn") || html.contains("login"))) {
+            Log.w(TAG, "Session expired despite checkLoginStatus=true, attempting auto re-login...")
+            val loginResult = performAutoLogin()
+            if (loginResult.success) {
+                // 重试获取页面
+                html = authenticator.fetchGradePage()
+            } else {
+                credentialsManager.setNeedsReLogin(true)
+                return SyncResult(false, errorMessage = loginResult.errorMessage, isAuthError = loginResult.isAuthError)
+            }
+        }
         
         if (html == null) {
              // 即使登录显示成功，获取页面仍可能失败（例如重定向问题）
@@ -201,6 +155,79 @@ class GradeRepository @Inject constructor(
         
         return processRemoteGrades(remoteGrades)
     }
+
+    /**
+     * 尝试自动登录
+     */
+    private suspend fun performAutoLogin(): LoginResult {
+        val username = credentialsManager.getUsername()
+        val password = credentialsManager.getPassword()
+        
+        if (username == null || password == null) {
+            return LoginResult(false, errorMessage = "未保存登录凭证，请重新登录", isAuthError = true)
+        }
+        
+        Log.d(TAG, "Attempting auto re-login with saved credentials...")
+        
+        // 尝试 HTTP 登录 (JwAuthenticator)
+        // 如果 JwAuthenticator 无法处理新版 CAS，我们将回退到 BackgroundWebViewAuthenticator
+        var loginSuccess = false
+        var loginErrorMsg = ""
+        var isAuthError = false
+        
+        when (val result = authenticator.login(username, password)) {
+            is JwAuthenticator.LoginResult.Success -> {
+                Log.d(TAG, "HTTP auto re-login successful")
+                loginSuccess = true
+                credentialsManager.setNeedsReLogin(false)
+            }
+            is JwAuthenticator.LoginResult.Error -> {
+                Log.w(TAG, "HTTP login failed: ${result.message}")
+                loginErrorMsg = result.message
+                if (isAuthenticationError(result.message)) {
+                    isAuthError = true
+                }
+            }
+            is JwAuthenticator.LoginResult.NeedLogin -> {
+                Log.w(TAG, "HTTP login failed: NeedLogin")
+                isAuthError = true
+                loginErrorMsg = "需要重新登录"
+            }
+        }
+        
+        // 如果 HTTP 登录失败，尝试 BackgroundWebViewAuthenticator
+        if (!loginSuccess) {
+            Log.d(TAG, "HTTP login failed, attempting Background WebView login...")
+            
+            val bgResult = backgroundWebViewAuthenticator.performLogin(username, password)
+            
+            if (bgResult.isSuccess) {
+                Log.d(TAG, "Background WebView login successful")
+                loginSuccess = true
+                credentialsManager.setNeedsReLogin(false)
+                // 登录成功后，Cookies 已经同步到 CookieManager 和 OkHttpClient
+            } else {
+                val error = bgResult.exceptionOrNull()
+                Log.e(TAG, "Background WebView login failed", error)
+                
+                // 如果之前的 HTTP 登录已经是认证错误，则保持该错误
+                // 否则使用 WebView 登录的错误
+                if (!isAuthError) {
+                     val msg = error?.message ?: "后台登录失败"
+                     loginErrorMsg = msg
+                     isAuthError = true // 既然两次尝试都失败了，大概率是凭证问题或系统变更，提示用户重新登录比较稳妥
+                }
+            }
+        }
+        
+        return LoginResult(loginSuccess, errorMessage = loginErrorMsg, isAuthError = isAuthError)
+    }
+
+    private data class LoginResult(
+        val success: Boolean,
+        val errorMessage: String? = null,
+        val isAuthError: Boolean = false
+    )
     
     /**
      * 处理远程成绩并更新本地数据库
