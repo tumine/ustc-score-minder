@@ -10,6 +10,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 
 @Composable
 fun LoginScreen(
@@ -147,7 +150,13 @@ fun CredentialInputDialog(
                     onValueChange = { username = it },
                     label = { Text("学号/工号") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        autoCorrect = false,
+                        imeAction = ImeAction.Next
+                    )
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -156,6 +165,11 @@ fun CredentialInputDialog(
                     label = { Text("密码") },
                     singleLine = true,
                     visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        autoCorrect = false,
+                        imeAction = ImeAction.Done
+                    ),
                     trailingIcon = {
                         val image = if (passwordVisible)
                             androidx.compose.material.icons.Icons.Filled.Visibility
