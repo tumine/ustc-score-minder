@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.ustc.scoreminder.data.local.CredentialsManager
+import com.ustc.scoreminder.data.remote.BackgroundWebViewAuthenticator
 import com.ustc.scoreminder.domain.usecase.SyncGradesUseCase
 import com.ustc.scoreminder.domain.usecase.SyncGradesUseCase.AuthenticationException
 import dagger.assisted.Assisted
@@ -17,7 +18,8 @@ class GradeSyncWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val syncGradesUseCase: SyncGradesUseCase,
     private val notificationHelper: NotificationHelper,
-    private val credentialsManager: CredentialsManager
+    private val credentialsManager: CredentialsManager,
+    private val backgroundWebViewAuthenticator: BackgroundWebViewAuthenticator
 ) : CoroutineWorker(appContext, workerParams) {
     
     companion object {
@@ -83,29 +85,19 @@ class GradeSyncWorker @AssistedInject constructor(
         return try {
             syncGradesUseCase().fold(
                 onSuccess = { result ->
-                    Log.d(TAG, "Sync successful: ${result.newGrades.size} new grades")
-                    
-                    if (result.hasChanges && notificationEnabled && result.newGrades.isNotEmpty()) {
-                        notificationHelper.showNewGradeNotification(result.newGrades)
-                    }
-
-                    credentialsManager.setLastSyncTime(System.currentTimeMillis())
-                    credentialsManager.setLastSyncResult("成功: 发现 ${result.newGrades.size} 个新成绩")
-                    
-                    ListenableWorker.Result.success()
+                    handleSyncSuccess(result, notificationEnabled)
                 },
                 onFailure = { e ->
                     Log.e(TAG, "Sync failed", e)
-                    credentialsManager.setLastSyncTime(System.currentTimeMillis())
-                    credentialsManager.setLastSyncResult("失败: ${e.message}")
                     
-                    // 检查是否为认证错误，若是则发送通知提醒用户重新登录
+                    // 认证错误：优先尝试后台重登后重试，而非直接发送通知
                     if (e is AuthenticationException) {
-                        Log.w(TAG, "Authentication error detected, notifying user to re-login")
-                        notificationHelper.showReLoginNotification(e.message)
+                        handleAuthFailureWithReLogin(notificationEnabled)
+                    } else {
+                        credentialsManager.setLastSyncTime(System.currentTimeMillis())
+                        credentialsManager.setLastSyncResult("失败: ${e.message}")
+                        ListenableWorker.Result.failure()
                     }
-                    
-                    ListenableWorker.Result.failure() 
                 }
             )
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -131,6 +123,97 @@ class GradeSyncWorker @AssistedInject constructor(
                     nextRequest
                 )
             }
+        }
+    }
+    
+    /**
+     * 处理同步成功
+     */
+    private fun handleSyncSuccess(
+        result: SyncGradesUseCase.SyncResult,
+        notificationEnabled: Boolean
+    ): ListenableWorker.Result {
+        Log.d(TAG, "Sync successful: ${result.newGrades.size} new grades")
+        
+        if (result.hasChanges && notificationEnabled && result.newGrades.isNotEmpty()) {
+            notificationHelper.showNewGradeNotification(result.newGrades)
+        }
+
+        credentialsManager.setLastSyncTime(System.currentTimeMillis())
+        credentialsManager.setLastSyncResult("成功: 发现 ${result.newGrades.size} 个新成绩")
+        
+        return ListenableWorker.Result.success()
+    }
+    
+    /**
+     * 处理认证失败：尝试后台重登后重试同步
+     * 只有在重登和重试都失败后才发送通知提醒用户
+     */
+    private suspend fun handleAuthFailureWithReLogin(
+        notificationEnabled: Boolean
+    ): ListenableWorker.Result {
+        Log.w(TAG, "Authentication error detected, attempting background re-login before notifying user...")
+        
+        val reLoginSuccess = attemptBackgroundReLogin()
+        
+        if (reLoginSuccess) {
+            Log.d(TAG, "Background re-login successful, retrying sync...")
+            
+            // 重登成功，重试同步
+            return syncGradesUseCase().fold(
+                onSuccess = { retryResult ->
+                    handleSyncSuccess(retryResult, notificationEnabled)
+                },
+                onFailure = { retryError ->
+                    Log.e(TAG, "Retry sync failed after re-login", retryError)
+                    credentialsManager.setLastSyncTime(System.currentTimeMillis())
+                    credentialsManager.setLastSyncResult("失败: 重登后重试仍失败 - ${retryError.message}")
+                    
+                    // 重试后仍为认证错误，通知用户
+                    if (retryError is AuthenticationException) {
+                        notificationHelper.showReLoginNotification(retryError.message)
+                    }
+                    
+                    ListenableWorker.Result.failure()
+                }
+            )
+        } else {
+            // 重登失败，通知用户
+            Log.w(TAG, "Background re-login failed, notifying user")
+            credentialsManager.setLastSyncTime(System.currentTimeMillis())
+            credentialsManager.setLastSyncResult("失败: 后台重登失败")
+            notificationHelper.showReLoginNotification("登录状态已过期，自动重登失败，请手动重新登录")
+            
+            return ListenableWorker.Result.failure()
+        }
+    }
+    
+    /**
+     * 尝试后台重登
+     * @return true 如果重登成功
+     */
+    private suspend fun attemptBackgroundReLogin(): Boolean {
+        val username = credentialsManager.getUsername()
+        val password = credentialsManager.getPassword()
+        
+        if (username.isNullOrBlank() || password.isNullOrBlank()) {
+            Log.w(TAG, "No saved credentials for background re-login")
+            return false
+        }
+        
+        return try {
+            val result = backgroundWebViewAuthenticator.performLogin(username, password)
+            if (result.isSuccess) {
+                Log.d(TAG, "Background WebView re-login successful")
+                credentialsManager.setNeedsReLogin(false)
+                true
+            } else {
+                Log.w(TAG, "Background WebView re-login failed: ${result.exceptionOrNull()?.message}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Background re-login exception", e)
+            false
         }
     }
 }
