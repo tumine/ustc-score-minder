@@ -15,6 +15,7 @@ import com.ustc.scoreminder.worker.GradeSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.ustc.scoreminder.data.repository.GradeRepository
 import javax.inject.Inject
 
 import android.content.SharedPreferences
@@ -29,6 +30,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val credentialsManager: CredentialsManager,
+    private val gradeRepository: GradeRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     
@@ -223,15 +225,25 @@ class SettingsViewModel @Inject constructor(
         uiState = uiState.copy(notificationEnabled = enabled)
     }
     
-    fun logout() {
+    fun logout(clearData: Boolean) {
+        // 清除凭证
         credentialsManager.clearCredentials()
+        
         // 同时清除 WebView 的 cookies
         CookieManager.getInstance().apply {
             removeAllCookies(null)
             flush()
         }
+        
+        // 异步清除成绩数据 (如果用户选择)
+        if (clearData) {
+            viewModelScope.launch(Dispatchers.IO) {
+                gradeRepository.clearAllGrades()
+            }
+        }
+        
         uiState = uiState.copy(isLoggedIn = false)
-        // 取消定时任务
+        // 取消定期任务
         workManager.cancelUniqueWork(GradeSyncWorker.WORK_NAME)
     }
 }

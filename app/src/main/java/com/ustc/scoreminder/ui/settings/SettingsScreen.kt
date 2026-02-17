@@ -172,15 +172,36 @@ fun SettingsScreen(
 
     // 退出登录确认对话框
     if (showLogoutDialog) {
+        var clearData by remember { mutableStateOf(false) } // 默认不勾选，防止误操作
+
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             title = { Text("确认退出") },
-            text = { Text("退出登录将清除所有本地保存的成绩数据和凭证。") },
+            text = { 
+                Column {
+                    Text("退出登录将清除所有本地保存的凭证。")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { clearData = !clearData }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = clearData,
+                            onCheckedChange = { clearData = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("同时清除本地成绩数据")
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showLogoutDialog = false
-                        viewModel.logout()
+                        viewModel.logout(clearData)
                         onLogout()
                     }
                 ) {
