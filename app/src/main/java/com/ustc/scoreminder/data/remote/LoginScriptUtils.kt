@@ -101,156 +101,95 @@ object LoginScriptUtils {
                 if (window._autoFillInjected) return;
                 window._autoFillInjected = true;
                 
-                var passwordFilled = false;
-                var usernameFilled = false;
+                var attempts = 0;
+                var maxAttempts = 40; // 20 seconds total
 
-                // 使用原生 setter 设置值（作为后备方案）
+                // 使用原生 setter 设置值，绕过 Angular 的属性拦截
                 var nativeSetter = Object.getOwnPropertyDescriptor(
                     window.HTMLInputElement.prototype, 'value'
                 ).set;
-
-                // 使用 execCommand 模拟真实输入，兼容 Angular ngModel
-                function fillInput(element, value) {
-                    element.focus();
-                    element.select();
-                    var success = document.execCommand('insertText', false, value);
-                    if (!success || element.value !== value) {
-                        console.log("Auto-fill: execCommand failed, using fallback");
-                        nativeSetter.call(element, value);
-                        element.dispatchEvent(new InputEvent('input', {
-                            bubbles: true, inputType: 'insertText', data: value
-                        }));
-                        element.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                    element.dispatchEvent(new Event('blur', { bubbles: true }));
+                
+                function setNativeValue(element, value) {
+                    nativeSetter.call(element, value);
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                    element.dispatchEvent(new Event('change', { bubbles: true }));
                 }
+                
+                function tryAutoFill() {
+                    // 等待 Angular 渲染完成
+                    var appRoot = document.querySelector('app-root');
+                    if (!appRoot || !appRoot.innerHTML || appRoot.innerHTML.trim().length < 100) {
+                        return false;
+                    }
 
-                function findInputs() {
+                    // Angular SPA 选择器
                     var usernameInput = document.querySelector('input[name="username"]')
                         || document.querySelector('#username')
                         || document.querySelector('input[type="text"]');
+                        
                     var passwordInput = document.querySelector('.passwordInput input')
                         || document.querySelector('input[type="password"]')
                         || document.querySelector('input[autocomplete="new-password"]')
                         || document.querySelector('#password')
                         || document.querySelector('input[name="password"]');
-                    return { username: usernameInput, password: passwordInput };
-                }
-
-                // 检测用户名输入框旁的图标
-                function findIconNear(inputEl) {
-                    if (!inputEl) return null;
-                    var container = inputEl.closest('nz-input-group, .ant-input-group-wrapper, .ant-input-affix-wrapper, ion-item, .input-wrapper, nz-form-control');
-                    if (!container) container = inputEl.parentElement;
-                    if (!container) return null;
-                    return container.querySelector('svg, i.anticon, i[nz-icon], span.anticon, ion-icon, .ant-input-prefix i, .ant-input-prefix svg, .ant-input-prefix span')
-                        || container.querySelector('i, svg, img');
-                }
-
-                // ======= 阶段1：密码立即填充（发现输入框即填） =======
-                function tryFillPassword() {
-                    if (passwordFilled) return;
-                    var inputs = findInputs();
-                    if (inputs.password) {
-                        console.log("Auto-fill: Filling password immediately");
-                        fillInput(inputs.password, "$safeP");
-                        passwordFilled = true;
-                        checkBothFilled();
+                    
+                    if (!usernameInput || !passwordInput) {
+                        return false;
                     }
-                }
 
-                // ======= 阶段2：用户名等待图标后填充 =======
-                function tryFillUsername() {
-                    if (usernameFilled) return;
-                    var inputs = findInputs();
-                    if (!inputs.username) return;
-                    var icon = findIconNear(inputs.username);
-                    if (icon) {
-                        console.log("Auto-fill: Username icon detected (" + icon.tagName + "), filling username");
-                        fillInput(inputs.username, "$safeU");
-                        usernameFilled = true;
-                        checkBothFilled();
-                    }
-                }
+                    console.log("Auto-fill: Found username and password inputs");
+                    
+                    setNativeValue(usernameInput, "$safeU");
+                    setNativeValue(passwordInput, "$safeP");
 
-                // ======= 两个字段都填完后 → 验证 + 点击登录 =======
-                function checkBothFilled() {
-                    if (!passwordFilled || !usernameFilled) return;
-                    console.log("Auto-fill: Both fields filled, verifying...");
+                    ['focus', 'blur'].forEach(function(evt) {
+                        usernameInput.dispatchEvent(new Event(evt, { bubbles: true }));
+                        passwordInput.dispatchEvent(new Event(evt, { bubbles: true }));
+                    });
+
+                    // 同时通知 AndroidBridge 记录凭证
                     try { AndroidBridge.captureCredentials("$safeU", "$safeP"); } catch(e) {}
-                    // 清理监听器
-                    if (pollId) clearInterval(pollId);
-                    if (obs) obs.disconnect();
-                    startVerify();
-                }
 
-                function startVerify() {
-                    var passes = 0;
-                    var attempts = 0;
-                    var vid = setInterval(function() {
-                        attempts++;
-                        var inputs = findInputs();
-                        if (!inputs.username || !inputs.password) {
-                            passes = 0; return;
-                        }
-                        var uOk = inputs.username.value === "$safeU";
-                        var pOk = inputs.password.value === "$safeP";
-                        if (!uOk || !pOk) {
-                            passes = 0;
-                            if (!uOk) fillInput(inputs.username, "$safeU");
-                            if (!pOk) fillInput(inputs.password, "$safeP");
-                            return;
-                        }
-                        passes++;
-                        if (passes >= 2 || attempts >= 10) {
-                            clearInterval(vid);
-                            console.log("Auto-fill: Verified, clicking login...");
-                            var btn = document.querySelector('button.login-button')
-                                || document.querySelector('button[type="submit"]')
-                                || document.querySelector('input[type="submit"]');
-                            if (btn) { btn.click(); }
-                            else {
-                                var form = document.querySelector('form');
-                                if (form) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                    console.log("Auto-fill: Values set, looking for login button...");
+                    
+                    setTimeout(function() {
+                        var loginBtn = document.querySelector('button.login-button')
+                            || document.querySelector('button[type="submit"]')
+                            || document.querySelector('input[type="submit"]');
+                        if (loginBtn) {
+                            console.log("Auto-fill: Clicking login button");
+                            loginBtn.click();
+                        } else {
+                            console.log("Auto-fill: Login button not found, trying form submit");
+                            var form = document.querySelector('form');
+                            if (form) {
+                                form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
                             }
                         }
-                    }, 200);
+                    }, 800);
+                    
+                    return true;
                 }
 
-                // ======= 统一监听：MutationObserver + 轮询 =======
-                var obs = new MutationObserver(function() {
-                    tryFillPassword();
-                    tryFillUsername();
+                var observer = new MutationObserver(function() {
+                    if (tryAutoFill()) {
+                        observer.disconnect();
+                        clearInterval(intervalId);
+                    }
                 });
-                obs.observe(document.body || document.documentElement, {
+                observer.observe(document.body || document.documentElement, {
                     childList: true, subtree: true
                 });
 
-                var attempts = 0;
-                var pollId = setInterval(function() {
+                var intervalId = setInterval(function() {
                     attempts++;
-                    tryFillPassword();
-                    tryFillUsername();
-                    if ((passwordFilled && usernameFilled) || attempts >= 40) {
-                        clearInterval(pollId);
-                        obs.disconnect();
-                        // 超时降级：强制填充
-                        if (!passwordFilled || !usernameFilled) {
-                            console.log("Auto-fill: Timeout, force filling...");
-                            var inputs = findInputs();
-                            if (inputs.username && !usernameFilled) { fillInput(inputs.username, "$safeU"); usernameFilled = true; }
-                            if (inputs.password && !passwordFilled) { fillInput(inputs.password, "$safeP"); passwordFilled = true; }
-                            if (usernameFilled && passwordFilled) {
-                                try { AndroidBridge.captureCredentials("$safeU", "$safeP"); } catch(e) {}
-                                startVerify();
-                            }
-                        }
+                    if (tryAutoFill() || attempts >= maxAttempts) {
+                        clearInterval(intervalId);
+                        observer.disconnect();
                     }
                 }, 500);
-
-                // 立即尝试
-                tryFillPassword();
-                tryFillUsername();
+                
+                tryAutoFill();
             })();
         """.trimIndent()
     }
