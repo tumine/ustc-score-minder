@@ -148,7 +148,7 @@ fun SettingsScreen(
             
             // 版本信息
             Text(
-                text = "USTC Score Minder v1.0",
+                text = "USTC Score Minder v1.1.1",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
