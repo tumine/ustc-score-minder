@@ -25,8 +25,20 @@ class BackgroundWebViewAuthenticator @Inject constructor(
     companion object {
         private const val TAG = "BgWebViewAuth"
         private const val LOGIN_URL = "https://jw.ustc.edu.cn/for-std/grade/sheet" // 直接访问成绩页触发登录
-        private const val SUCCESS_URL_PATTERN = "for-std/grade/sheet"
         private const val TIMEOUT_MS = 60000L // 60秒超时
+    }
+
+    /**
+     * 判断 URL 是否表示登录成功（到达教务系统任意已登录页面）
+     * CAS 登录后可能重定向到 /home、/for-std/... 等页面，而非固定的 grade/sheet
+     */
+    private fun isLoginSuccessUrl(url: String): Boolean {
+        if (!url.contains("jw.ustc.edu.cn")) return false
+        // ucas-sso/login?ticket=... 是 SSO 回调中间页，不算最终成功
+        if (url.contains("ucas-sso/login")) return false
+        // 其他含 "login" 的页面是登录页
+        if (url.contains("/login")) return false
+        return true
     }
 
     /**
@@ -117,13 +129,14 @@ class BackgroundWebViewAuthenticator @Inject constructor(
                                                 view?.evaluateJavascript(captureScript, null)
                                                 view?.evaluateJavascript(script, null)
                                             }
-                                            // 2. 教务系统首页（可能需要点击登录）
-                                            else if (url.contains("jw.ustc.edu.cn") && url.contains("login")) {
-                                                Log.d(TAG, "On JW portal, injecting auto-click script")
+                                            // 2. 教务系统登录页（可能需要点击统一身份认证按钮）
+                                            //    排除 ucas-sso/login?ticket=... 这种 SSO 回调中间页
+                                            else if (url.contains("jw.ustc.edu.cn") && url.contains("/login") && !url.contains("ucas-sso/login")) {
+                                                Log.d(TAG, "On JW portal login, injecting auto-click script")
                                                 view?.evaluateJavascript(LoginScriptUtils.getAutoLoginClickScript(), null)
                                             }
-                                            // 3. 登录成功
-                                            else if (url.contains(SUCCESS_URL_PATTERN) && !url.contains("login")) {
+                                            // 3. 登录成功（到达教务系统任意非登录页面）
+                                            else if (isLoginSuccessUrl(url)) {
                                                 Log.i(TAG, "Login successful! URL: $url")
                                                 resumeExample(Result.success(Unit))
                                             }
