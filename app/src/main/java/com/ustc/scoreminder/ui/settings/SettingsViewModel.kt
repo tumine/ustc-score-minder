@@ -11,6 +11,8 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import com.ustc.scoreminder.data.local.CredentialsManager
+import com.ustc.scoreminder.data.remote.UpdateChecker
+import com.ustc.scoreminder.data.remote.UpdateInfo
 import com.ustc.scoreminder.worker.GradeSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +33,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 class SettingsViewModel @Inject constructor(
     private val credentialsManager: CredentialsManager,
     private val gradeRepository: GradeRepository,
+    private val updateChecker: UpdateChecker,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     
@@ -224,6 +227,33 @@ class SettingsViewModel @Inject constructor(
         credentialsManager.setNotificationEnabled(enabled)
         uiState = uiState.copy(notificationEnabled = enabled)
     }
+
+    fun checkForUpdate() {
+        uiState = uiState.copy(isCheckingUpdate = true, updateError = null, updateInfo = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val currentVersion = com.ustc.scoreminder.BuildConfig.VERSION_NAME
+                val info = updateChecker.checkForUpdate(currentVersion)
+                viewModelScope.launch(Dispatchers.Main) {
+                    uiState = uiState.copy(
+                        isCheckingUpdate = false,
+                        updateInfo = info
+                    )
+                }
+            } catch (e: Exception) {
+                viewModelScope.launch(Dispatchers.Main) {
+                    uiState = uiState.copy(
+                        isCheckingUpdate = false,
+                        updateError = e.message ?: "检查更新失败"
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        uiState = uiState.copy(updateInfo = null, updateError = null)
+    }
     
     fun logout(clearData: Boolean) {
         // 清除凭证
@@ -255,7 +285,10 @@ data class SettingsUiState(
     val lastSyncTime: Long = 0,
     val lastSyncResult: String? = null,
     val nextSyncTime: Long = 0,
-    val isSyncing: Boolean = false
+    val isSyncing: Boolean = false,
+    val isCheckingUpdate: Boolean = false,
+    val updateInfo: UpdateInfo? = null,
+    val updateError: String? = null
 ) {
     // 兼容旧 UI 代码的辅助属性
     val syncIntervalMinutes: Int
