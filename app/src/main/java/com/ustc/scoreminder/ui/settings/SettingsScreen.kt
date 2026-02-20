@@ -1,5 +1,7 @@
 package com.ustc.scoreminder.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -11,8 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ustc.scoreminder.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,6 +137,28 @@ fun SettingsScreen(
             
             HorizontalDivider()
             
+            // 关于
+            SettingsSection(title = "关于") {
+                SettingsItem(
+                    title = "当前版本",
+                    subtitle = "v${BuildConfig.VERSION_NAME}",
+                    showArrow = false,
+                    onClick = { }
+                )
+
+                SettingsItem(
+                    title = "检查更新",
+                    subtitle = if (uiState.isCheckingUpdate) "正在检查..." else "从 GitHub 获取最新版本",
+                    onClick = {
+                        if (!uiState.isCheckingUpdate) {
+                            viewModel.checkForUpdate()
+                        }
+                    }
+                )
+            }
+
+            HorizontalDivider()
+
             // 账号设置
             SettingsSection(title = "账号") {
                 SettingsItem(
@@ -143,18 +169,8 @@ fun SettingsScreen(
                     }
                 )
             }
-            
+
             Spacer(modifier = Modifier.weight(1f))
-            
-            // 版本信息
-            Text(
-                text = "USTC Score Minder v1.1.2",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(16.dp)
-            )
         }
     }
     
@@ -235,6 +251,100 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {}
+        )
+    }
+
+    // 检查更新加载中
+    if (uiState.isCheckingUpdate) {
+        AlertDialog(
+            onDismissRequest = { /* 禁止关闭 */ },
+            title = { Text("检查更新") },
+            text = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(36.dp),
+                        strokeWidth = 3.dp
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("正在检查更新...")
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
+    // 更新检查结果对话框
+    val updateInfo = uiState.updateInfo
+    if (updateInfo != null) {
+        val context = LocalContext.current
+        if (updateInfo.hasUpdate) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissUpdateDialog() },
+                title = { Text("发现新版本") },
+                text = {
+                    Column {
+                        Text("最新版本: ${updateInfo.latestVersion}")
+                        Text("当前版本: ${updateInfo.currentVersion}")
+                        if (updateInfo.releaseNotes.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "更新说明:",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = updateInfo.releaseNotes,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.releaseUrl))
+                            context.startActivity(intent)
+                            viewModel.dismissUpdateDialog()
+                        }
+                    ) {
+                        Text("前往下载")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissUpdateDialog() }) {
+                        Text("稍后再说")
+                    }
+                }
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissUpdateDialog() },
+                title = { Text("检查更新") },
+                text = { Text("当前已是最新版本 (${updateInfo.currentVersion})") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissUpdateDialog() }) {
+                        Text("确定")
+                    }
+                }
+            )
+        }
+    }
+
+    // 更新检查失败
+    val updateError = uiState.updateError
+    if (updateError != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissUpdateDialog() },
+            title = { Text("检查更新失败") },
+            text = { Text(updateError) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissUpdateDialog() }) {
+                    Text("确定")
+                }
+            }
         )
     }
 }
