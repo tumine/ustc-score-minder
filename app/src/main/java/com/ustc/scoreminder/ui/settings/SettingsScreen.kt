@@ -56,6 +56,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
         ) {
             // 同步设置
             SettingsSection(title = "同步设置") {
@@ -169,8 +170,6 @@ fun SettingsScreen(
                     }
                 )
             }
-
-            Spacer(modifier = Modifier.weight(1f))
         }
     }
     
