@@ -109,7 +109,7 @@ class BackgroundWebViewAuthenticator @Inject constructor(
                                     fun onLoginErrorDetected() {
                                         Log.e(TAG, "Login error detected by JS")
                                         mainHandler.post {
-                                            resumeExample(Result.failure(Exception("用户名或密码错误")))
+                                            resumeExample(Result.failure(Exception("用户名或密码错误 / Incorrect user name or password")))
                                         }
                                     }
                                 }, "AndroidBridge")

@@ -48,7 +48,8 @@ object LoginScriptUtils {
                     if ((errorToast && errorToast.innerText) || 
                         bodyText.includes("用户名或密码错误，请确认后重新输入") ||
                         bodyText.includes("用户名或密码错误") ||
-                        bodyText.includes("认证失败")) {
+                        bodyText.includes("认证失败") ||
+                        bodyText.includes("Incorrect user name or password")) {
                         console.log("Login error detected");
                         try { AndroidBridge.onLoginErrorDetected(); } catch(e) {}
                     }

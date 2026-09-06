@@ -165,7 +165,7 @@ class GradeListViewModel @Inject constructor(
             it.copy(
                 showWebViewLogin = false, 
                 showCredentialDialog = true,
-                errorMessage = "用户名或密码错误，请确认后重新输入"
+                errorMessage = "用户名或密码错误 / Incorrect user name or password"
             ) 
         }
     }
