@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ustc.scoreminder.data.remote.LoginScriptUtils
+import com.ustc.scoreminder.domain.model.VerificationCodeMethod
 
 /**
  * WebView 登录屏幕
@@ -29,7 +30,8 @@ fun WebViewLoginScreen(
     onLoginSuccess: (username: String, password: String) -> Unit,
     onLoginCancel: () -> Unit,
     onLoginError: () -> Unit = {},
-    credentials: Pair<String, String>? = null
+    credentials: Pair<String, String>? = null,
+    verificationCodeMethod: VerificationCodeMethod = VerificationCodeMethod.SMS
 ) {
     val loginUrl = "https://jw.ustc.edu.cn/for-std/grade/sheet"
     val successUrlPattern = "jw.ustc.edu.cn"
@@ -107,7 +109,7 @@ fun WebViewLoginScreen(
                         domStorageEnabled = true
                         databaseEnabled = true
                         cacheMode = WebSettings.LOAD_DEFAULT
-                        userAgentString = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
+                        userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                         setSupportMultipleWindows(false)
                         javaScriptCanOpenWindowsAutomatically = true
                         allowContentAccess = true
@@ -153,6 +155,7 @@ fun WebViewLoginScreen(
                                 // Case 1: On USTC CAS Login Page (Angular SPA)
                                 if (it.contains("id.ustc.edu.cn") || it.contains("passport.ustc.edu.cn")) {
                                     injectCredentialCaptureScript(view)
+                                    injectSecondFactorAutoRequestScript(view, verificationCodeMethod)
                                     // 如果有凭证，尝试自动填充
                                     credentials?.let { (u, p) ->
                                         injectAutoFillScript(view, u, p)
@@ -235,6 +238,17 @@ private fun injectAutoFillScript(webView: WebView?, u: String, p: String) {
     if (u.isBlank() || p.isBlank()) return
     val js = LoginScriptUtils.getAutoFillScript(u, p)
     webView?.evaluateJavascript(js, null)
+}
+
+/** 注入二次身份验证验证码自动请求脚本。 */
+private fun injectSecondFactorAutoRequestScript(
+    webView: WebView?,
+    verificationCodeMethod: VerificationCodeMethod
+) {
+    webView?.evaluateJavascript(
+        LoginScriptUtils.getSecondFactorAutoRequestScript(verificationCodeMethod),
+        null
+    )
 }
 
 /**

@@ -15,6 +15,7 @@ bin/
 gen/
 out/
 release/
+/app/debug/
 
 # Gradle files
 .gradle/
@@ -26,6 +27,16 @@ local.properties
 
 # Log Files
 *.log
+
+# Temporary and editor backup files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+*~
 
 # Android Studio Navigation editor temp files
 .navigation/
@@ -43,6 +54,10 @@ captures/
 .idea/dictionaries
 .idea/libraries
 .idea/caches
+
+# Other local editor metadata
+.vscode/
+.fleet/
 
 # Keystore files
 # Uncomment the following lines if you do not want to check your keystore files in.

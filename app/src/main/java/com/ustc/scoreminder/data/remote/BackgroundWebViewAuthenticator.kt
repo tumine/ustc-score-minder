@@ -93,7 +93,7 @@ class BackgroundWebViewAuthenticator @Inject constructor(
                                     domStorageEnabled = true
                                     databaseEnabled = true
                                     cacheMode = WebSettings.LOAD_DEFAULT
-                                    userAgentString = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
+                                    userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                                 }
 
@@ -127,6 +127,10 @@ class BackgroundWebViewAuthenticator @Inject constructor(
                                                 // 同时也注入捕获脚本以启用错误检测
                                                 val captureScript = LoginScriptUtils.getCredentialCaptureScript()
                                                 view?.evaluateJavascript(captureScript, null)
+                                                view?.evaluateJavascript(
+                                                    LoginScriptUtils.getSecondFactorAutoRequestScript(),
+                                                    null
+                                                )
                                                 view?.evaluateJavascript(script, null)
                                             }
                                             // 2. 教务系统登录页（可能需要点击统一身份认证按钮）
